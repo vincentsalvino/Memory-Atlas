@@ -1,15 +1,71 @@
-# Brainded
+# Memory Atlas
 
-Shared, persistent context for coding agents through the Model Context Protocol
-(MCP). Brainded stores scoped memories in SQLite and combines memory retrieval,
-indexed code, and dependency context within a token budget. Any compatible MCP
-client uses the same tools and database contract.
+**Give your coding agents shared memory that lasts beyond a single conversation.**
+
+Memory Atlas, developed in the **Brainded** repository, is a local memory and
+context server for AI coding agents. It uses the Model Context Protocol (MCP) to
+help agents save useful project knowledge, retrieve it in later sessions, and
+share it across compatible clients through one SQLite database.
+
+The purpose is simple: spend less time explaining the same project decisions
+and give each new session a better starting point.
+
+[Why it exists](#why-it-exists) · [What it does](#what-it-does) ·
+[Getting started](#getting-started) · [Feedback](#try-it-and-share-feedback) ·
+[Documentation](docs/README.md)
+
+## Why it exists
+
+A project's useful context grows over time: architecture decisions, conventions,
+constraints, and lessons from difficult bugs. That knowledge can get scattered
+across conversations, especially when you switch sessions or coding agents.
+
+Memory Atlas gives agents a shared place to keep that knowledge and retrieve
+the parts relevant to the next task. For example, an agent can save why a service
+uses a particular storage boundary; a later session can retrieve that decision
+before making a change that touches the same service.
+
+It complements an agent's native memory. Agents explicitly choose what to save;
+the server does not automatically import conversation histories. Retrieved
+memories are supporting evidence: current code and your instructions take
+precedence.
+
+## What it does
+
+| Capability | Purpose |
+| --- | --- |
+| Persistent project knowledge | Store decisions, constraints, facts, and reusable patterns across sessions. |
+| Shared MCP access | Let compatible clients use the same tools and database contract. |
+| Scoped memories | Organize knowledge by project, session, or genuinely global relevance. |
+| Relevant retrieval | Combine keyword and semantic search to find useful memories. |
+| Bounded context | Compile ranked context within a requested token budget, including code and dependency context when the project has indexed code. |
+| Feedback and outcomes | Record which delivered memories helped and how the task ended. |
+| Read-only visualizer | Inspect memories, context deliveries, and workflow activity in a local web UI. |
+
+The default server uses SQLite and local embeddings. The first semantic operation
+can download model weights. Feedback and outcome recording are available today;
+adaptive learning and near-duplicate ranking adjustments are disabled by default.
+
+## How agents use it
+
+1. **Retrieve context** before substantive work, using the task description,
+   project scope, and a token budget.
+2. **Work against the current repository**, checking retrieved knowledge against
+   the code and your instructions.
+3. **Report useful context and the outcome**, linked to the original delivery.
+4. **Save durable findings** when there is something new worth remembering.
+
+Trivial edits do not need this workflow. The shared
+[agent protocol](docs/agent-integration/AGENT_BRAIN_PROTOCOL.md) explains the
+contract in full.
 
 ## Getting started
 
-Use **Node.js 24 or newer** and npm. Run these commands from the repository root:
+Use **Node.js 24 or newer** and npm. For a fresh checkout:
 
 ```sh
+git clone https://github.com/vincentsalvino/Memory-Atlas.git
+cd Brainded
 npm ci
 npm run check
 ```
@@ -38,8 +94,8 @@ absolute paths when configuring a client that may start outside this directory:
     "ai-brain": {
       "command": "node",
       "args": [
-        "/absolute/path/to/Brainded/packages/mcp/dist/server.js",
-        "/absolute/path/to/Brainded/data/brain.db"
+        "/absolute/path/to/ai-brain/packages/mcp/dist/server.js",
+        "/absolute/path/to/ai-brain/data/brain.db"
       ]
     }
   }
@@ -54,7 +110,28 @@ the `brain_*` tools.
 The [client setup guide](docs/agent-integration/CLIENT_SETUP.md) covers Codex,
 ChatGPT, Claude Code, and other MCP hosts.
 
-## Run the visualizer
+After connecting, ask your agent to call `brain_status` to verify the connection.
+Then try a real task with a stable project scope, such as
+`{ "kind": "project", "id": "my-project" }`. Clients sharing knowledge about
+that project should use the same project ID and database path. The server ships
+as a local stdio process; hosted clients need a suitable connection to reach it.
+
+### Available tools
+
+| Tool | What it does |
+| --- | --- |
+| `brain_context` | Build a ranked context pack within a token budget. |
+| `brain_search` | Search for ranked memory candidates. |
+| `brain_recall` | Look up memories directly by ID or filter. |
+| `brain_remember` | Save a new memory. |
+| `brain_update` | Revise or archive an existing memory. |
+| `brain_forget` | Archive a memory through a soft delete. |
+| `brain_feedback` | Report whether a delivered memory was useful. |
+| `brain_record_outcome` | Record a task's result against its context delivery. |
+| `brain_status` | Check server health and capabilities. |
+| `brain_project` | Confirm a project scope and its memory count. |
+
+## Open the Memory Atlas visualizer
 
 Once the MCP server has initialized the database:
 
@@ -123,3 +200,18 @@ Add the generated entry to your MCP client and reconnect. The CLI uses
 `--config` to use a different database. The tarball includes the server and
 database migrations. npm resolves runtime dependencies for the device. The
 first semantic operation can download the model to `~/.brainded/models`.
+
+## Try it and share feedback
+
+**Consider trying Memory Atlas on a real project and sharing your feedback.**
+Connect your coding agent, save a useful project decision, and see whether a
+later session retrieves it when it matters.
+
+What was helpful? What felt confusing? Did the retrieved context miss something
+important or include something irrelevant? Reports about setup, retrieval
+quality, and the visualizer help guide the project's direction.
+
+[Open an issue](https://github.com/vincentsalvino/Memory-Atlas/issues) with your
+feedback, a bug report, or an idea. Include your MCP client, relevant setup
+details, and what you expected versus what happened. Use a minimal example
+without private project data.
