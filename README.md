@@ -16,6 +16,17 @@ and give each new session a better starting point.
 
 ## Public release
 
+Memory Atlas is available on npm as
+[`brainded-mcp`](https://www.npmjs.com/package/brainded-mcp):
+
+```sh
+npm install --global brainded-mcp@0.1.1
+npm update --global brainded-mcp
+```
+
+Reconnect MCP clients after updating. Keep their existing absolute database paths
+so both harnesses continue to share the same stored memories.
+
 Download the installer, checksum and dependency-audit snapshot from
 [Memory Atlas v0.1.1](https://github.com/vincentsalvino/Memory-Atlas/releases/tag/v0.1.1).
 Verify the tarball with the accompanying `SHA256SUMS.txt`, then install:
@@ -29,8 +40,8 @@ brain-mcp --config
 On Linux, use `sha256sum --check SHA256SUMS.txt`. In PowerShell, use
 `Get-FileHash .\brainded-mcp-0.1.1.tgz -Algorithm SHA256` and compare the value
 with `SHA256SUMS.txt`. Download both from the official release page. The npm
-distributable is named `brainded-mcp`; registry installation/update availability
-is tracked separately from the downloadable GitHub release.
+distributable is named `brainded-mcp`. Version 0.1.1 on npm is byte-for-byte
+identical to the verified GitHub tarball.
 
 ## Security and data safety
 
