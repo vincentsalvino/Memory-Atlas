@@ -44,7 +44,10 @@ precedence.
 
 The default server uses SQLite and local embeddings. The first semantic operation
 can download model weights. Feedback and outcome recording are available today;
-adaptive learning and near-duplicate ranking adjustments are disabled by default.
+production learning and near-duplicate handling are enabled with independent rollback controls.
+See [harness setup and usage tracking](docs/agent-integration/HARNESS_SETUP.md) for
+private project scopes, automatic JSON configuration setup, skill/plugin reporting,
+and honest runtime status.
 
 ## How agents use it
 
@@ -130,6 +133,8 @@ as a local stdio process; hosted clients need a suitable connection to reach it.
 | `brain_record_outcome` | Record a task's result against its context delivery. |
 | `brain_status` | Check server health and capabilities. |
 | `brain_project` | Confirm a project scope and its memory count. |
+| `brain_usage` | Report an observed skill/plugin lifecycle event, labeled as self-reported. |
+| `brain_tool_rankings` | Rank observed Brain calls and reported skills/plugins for the configured harness. |
 
 ## Open the Memory Atlas visualizer
 

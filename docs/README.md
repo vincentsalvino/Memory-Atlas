@@ -16,6 +16,8 @@ current implementation and archived phase findings when assessing what ships.
 
 ## Agent integration
 
+- [Harness setup, private project memory and usage tracking](agent-integration/HARNESS_SETUP.md)
+
 - [Client setup and portable instructions](agent-integration/CLIENT_SETUP.md)
 - [Agent protocol](agent-integration/AGENT_BRAIN_PROTOCOL.md): client-independent tool contract.
 - [Workflow policy](agent-integration/BRAIN_WORKFLOW_POLICY.md): preflight, feedback, and outcomes.

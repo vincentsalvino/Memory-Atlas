@@ -15,6 +15,7 @@ import { assertContextMembershipConsistent } from "@brain/contracts";
 import { applyFeedbackToPerformance, applyOutcomeToPerformance } from "./memory-performance-store.js";
 
 interface RetrievalRow {
+  harness_id?: string | null;
   id: string;
   timestamp: string;
   scope_kind: string;
@@ -25,6 +26,7 @@ interface RetrievalRow {
 }
 
 interface ContextRow {
+  harness_id?: string | null;
   id: string;
   timestamp: string;
   retrieval_event_id: string;
@@ -55,6 +57,7 @@ interface ContextMemoryRow {
 // mapping this store already uses -- one source of truth for "what a raw row means" rather than
 // a second, independently-maintained copy that could silently drift from this one.
 export interface OutcomeRow {
+  harness_id?: string | null;
   id: string;
   timestamp: string;
   task_id: string;
@@ -66,6 +69,7 @@ export interface OutcomeRow {
 }
 
 export interface FeedbackRow {
+  harness_id?: string | null;
   id: string;
   timestamp: string;
   memory_id: string;
@@ -104,6 +108,7 @@ interface ContextSourceRow {
 
 function retrievalFromRow(r: RetrievalRow): RetrievalEvent {
   return {
+    ...(r.harness_id ? { harnessId: r.harness_id } : {}),
     id: r.id,
     timestamp: r.timestamp,
     scope: { kind: r.scope_kind as RetrievalEvent["scope"]["kind"], id: r.scope_id },
@@ -130,6 +135,7 @@ function contextMemoryFromRow(r: ContextMemoryRow): ContextEventMemory {
  */
 function contextFromRow(r: ContextRow, memories: ContextEventMemory[]): ContextEvent {
   return {
+    ...(r.harness_id ? { harnessId: r.harness_id } : {}),
     id: r.id,
     timestamp: r.timestamp,
     retrievalEventId: r.retrieval_event_id,
@@ -150,6 +156,7 @@ function contextFromRow(r: ContextRow, memories: ContextEventMemory[]): ContextE
 
 export function outcomeFromRow(r: OutcomeRow): OutcomeEvent {
   return {
+    ...(r.harness_id ? { harnessId: r.harness_id } : {}),
     id: r.id,
     timestamp: r.timestamp,
     taskId: r.task_id,
@@ -163,6 +170,7 @@ export function outcomeFromRow(r: OutcomeRow): OutcomeEvent {
 
 export function feedbackFromRow(r: FeedbackRow): FeedbackEvent {
   return {
+    ...(r.harness_id ? { harnessId: r.harness_id } : {}),
     id: r.id,
     timestamp: r.timestamp,
     memoryId: r.memory_id,
@@ -232,13 +240,13 @@ export function insertMutationEventRow(db: Database.Database, event: MemoryMutat
 
 /** SQLite-backed, append-only implementation of EventStore. See db.ts's migration for the five event tables. */
 export class SqliteEventStore implements EventStore {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database.Database, private readonly harnessId: string | null = null) {}
 
   async recordRetrieval(event: Omit<RetrievalEvent, "id" | "timestamp">): Promise<RetrievalEvent> {
-    const full: RetrievalEvent = { ...event, id: randomUUID(), timestamp: new Date().toISOString() };
+    const full: RetrievalEvent = { ...event, ...(this.harnessId ? { harnessId: this.harnessId } : {}), id: randomUUID(), timestamp: new Date().toISOString() };
     this.db
       .prepare(
-        `INSERT INTO retrieval_events (id, timestamp, scope_kind, scope_id, query_text, candidate_ids, task_id) VALUES (?,?,?,?,?,?,?)`,
+        `INSERT INTO retrieval_events (id, timestamp, scope_kind, scope_id, query_text, candidate_ids, task_id, harness_id) VALUES (?,?,?,?,?,?,?,?)`,
       )
       .run(
         full.id,
@@ -248,6 +256,7 @@ export class SqliteEventStore implements EventStore {
         full.queryText,
         JSON.stringify(full.candidateIds),
         full.taskId,
+        this.harnessId,
       );
     return full;
   }
@@ -264,10 +273,10 @@ export class SqliteEventStore implements EventStore {
   async recordContext(event: Omit<ContextEvent, "id" | "timestamp">): Promise<ContextEvent> {
     assertContextMembershipConsistent(event);
 
-    const full: ContextEvent = { ...event, id: randomUUID(), timestamp: new Date().toISOString() };
+    const full: ContextEvent = { ...event, ...(this.harnessId ? { harnessId: this.harnessId } : {}), id: randomUUID(), timestamp: new Date().toISOString() };
 
     const insertEvent = this.db.prepare(
-      `INSERT INTO context_events (id, timestamp, retrieval_event_id, scope_kind, scope_id, task_id, included_memory_ids, omitted_memory_ids, token_count, candidate_count, candidate_token_count, retrieval_ms, ranking_ms, compile_ms, optimize_ms) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO context_events (id, timestamp, retrieval_event_id, scope_kind, scope_id, task_id, included_memory_ids, omitted_memory_ids, token_count, candidate_count, candidate_token_count, retrieval_ms, ranking_ms, compile_ms, optimize_ms, harness_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     );
     const insertMembership = this.db.prepare(
       `INSERT INTO context_event_memories (context_event_id, memory_id, included, rank, token_count) VALUES (?,?,?,?,?)`,
@@ -290,6 +299,7 @@ export class SqliteEventStore implements EventStore {
         full.rankingMs,
         full.compileMs,
         full.optimizeMs,
+        this.harnessId,
       );
       for (const memory of full.memories) {
         insertMembership.run(full.id, memory.memoryId, memory.included ? 1 : 0, memory.rank, memory.tokenCount);
@@ -340,9 +350,9 @@ export class SqliteEventStore implements EventStore {
    * reason to accept a torn write here.
    */
   async recordOutcome(event: Omit<OutcomeEvent, "id" | "timestamp">): Promise<OutcomeEvent> {
-    const full: OutcomeEvent = { ...event, id: randomUUID(), timestamp: new Date().toISOString() };
+    const full: OutcomeEvent = { ...event, ...(this.harnessId ? { harnessId: this.harnessId } : {}), id: randomUUID(), timestamp: new Date().toISOString() };
     const insert = this.db.prepare(
-      `INSERT INTO outcome_events (id, timestamp, task_id, session_id, context_id, outcome, signal, notes) VALUES (?,?,?,?,?,?,?,?)`,
+      `INSERT INTO outcome_events (id, timestamp, task_id, session_id, context_id, outcome, signal, notes, harness_id) VALUES (?,?,?,?,?,?,?,?,?)`,
     );
     this.db.transaction(() => {
       insert.run(
@@ -354,6 +364,7 @@ export class SqliteEventStore implements EventStore {
         full.outcome,
         full.signal ? JSON.stringify(full.signal) : null,
         full.notes,
+        this.harnessId,
       );
       applyOutcomeToPerformance(this.db, full);
     })();
@@ -362,9 +373,9 @@ export class SqliteEventStore implements EventStore {
 
   /** Phase 4.1 (F12): same atomicity discipline as recordOutcome above. */
   async recordFeedback(event: Omit<FeedbackEvent, "id" | "timestamp">): Promise<FeedbackEvent> {
-    const full: FeedbackEvent = { ...event, id: randomUUID(), timestamp: new Date().toISOString() };
+    const full: FeedbackEvent = { ...event, ...(this.harnessId ? { harnessId: this.harnessId } : {}), id: randomUUID(), timestamp: new Date().toISOString() };
     const insert = this.db.prepare(
-      `INSERT INTO feedback_events (id, timestamp, memory_id, task_id, context_id, useful, reason, notes) VALUES (?,?,?,?,?,?,?,?)`,
+      `INSERT INTO feedback_events (id, timestamp, memory_id, task_id, context_id, useful, reason, notes, harness_id) VALUES (?,?,?,?,?,?,?,?,?)`,
     );
     this.db.transaction(() => {
       insert.run(
@@ -376,6 +387,7 @@ export class SqliteEventStore implements EventStore {
         full.useful === null ? null : full.useful ? 1 : 0,
         full.reason,
         full.notes,
+        this.harnessId,
       );
       applyFeedbackToPerformance(this.db, full);
     })();

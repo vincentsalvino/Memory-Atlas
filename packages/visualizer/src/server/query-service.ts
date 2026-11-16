@@ -1,4 +1,4 @@
-import type { MemoryRepository, EventStore, RetrievalStore, MemoryPerformanceStore, MemoryRecord, ScopeRef, SimilarityPair } from "@brain/contracts";
+import type { MemoryRepository, EventStore, RetrievalStore, MemoryPerformanceStore, MemoryRecord, ScopeRef, SimilarityPair, UsageRanking } from "@brain/contracts";
 import { DEFAULT_LEARNING_CONFIG } from "@brain/contracts";
 import { computeUsefulnessSignal } from "@brain/learning";
 import type {
@@ -41,7 +41,7 @@ export class VisualizerQueryService {
     private readonly events: EventStore,
     private readonly retrieval: RetrievalStore,
     private readonly performance: MemoryPerformanceStore,
-    private readonly capabilities: { vectorSearchAvailable: boolean; appliedMigrations: string[] },
+    private readonly capabilities: { vectorSearchAvailable: boolean; appliedMigrations: string[]; harnessStore?: { runtimeStatus(): {learningEnabled: boolean | null; redundancyEnabled: boolean | null; instances: number}; rankings(): Promise<UsageRanking[]> } },
   ) {}
 
   async getOverview(): Promise<OverviewResponse> {
@@ -64,20 +64,32 @@ export class VisualizerQueryService {
       .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
       .slice(0, RECENT_ACTIVITY_LIMIT);
 
+    let runtime: {learningEnabled: boolean | null; redundancyEnabled: boolean | null; instances: number} = { learningEnabled: null, redundancyEnabled: null, instances: 0 };
+    let usage: UsageRanking[] = [];
+    try {
+      if (this.capabilities.harnessStore) {
+        runtime = this.capabilities.harnessStore.runtimeStatus();
+        usage = await this.capabilities.harnessStore.rankings();
+      }
+    } catch { /* Older databases remain inspectable before the next MCP startup migrates them. */ }
     return {
+      runtimeInstances: runtime.instances,
+      usage,
       memories: memoryCounts,
       events: eventCounts,
       recentActivity,
       vectorSearchAvailable: this.capabilities.vectorSearchAvailable,
       appliedMigrations: this.capabilities.appliedMigrations,
-      learning: { enabled: false }, // mirrors DEFAULT_LEARNING_CONFIG.enabled (@brain/contracts)
-      redundancy: { enabled: false }, // mirrors Gateway's constructor default (@brain/gateway)
+      learning: { enabled: runtime.learningEnabled },
+      redundancy: { enabled: runtime.redundancyEnabled },
       workflow,
     };
   }
 
   async listContexts(limit: number = CONTEXT_LIST_LIMIT): Promise<ContextListResponse> {
-    return { items: await this.events.listRecentContextEvents(limit) };
+    const contexts = await this.events.listRecentContextEvents(limit);
+    const items = await Promise.all(contexts.map(async ctx => ({ ...ctx, outcome: (await this.events.getOutcomesForContext(ctx.id)).at(-1)?.outcome ?? null })));
+    return { items };
   }
 
   async getContextDetail(id: string): Promise<ContextDetailResponse | null> {

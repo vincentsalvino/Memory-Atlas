@@ -407,10 +407,11 @@ test("P2-005: an unknown contextId is rejected loudly on feedback and on outcome
   );
 });
 
-test("P2-005: feedback and outcome without a contextId still work (backward compatible)", async () => {
-  const { gateway, records } = contextSetup();
+test("P2-005: unlinked feedback remains compatible for existing global memories", async () => {
+  const { gateway } = contextSetup();
+  const existing = await gateway.remember({type: "fact", content: "global feedback target", scope: globalScope()});
   const feedback = await gateway.feedback({
-    memoryId: records[0]!.id,
+    memoryId: existing.id,
     taskId: "t-1",
     contextId: null,
     useful: true,

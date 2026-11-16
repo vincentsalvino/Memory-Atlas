@@ -1,5 +1,7 @@
 import type {
   ContextEvent,
+  UsageRanking,
+  OutcomeValue,
   ContextEventSource,
   FeedbackEvent,
   OutcomeEvent,
@@ -16,13 +18,15 @@ export interface OverviewResponse {
   recentActivity: ActivityItem[];
   vectorSearchAvailable: boolean;
   appliedMigrations: string[];
-  learning: { enabled: boolean };
-  redundancy: { enabled: boolean };
+  learning: { enabled: boolean | null };
+  redundancy: { enabled: boolean | null };
   /**
    * Agent Workflow Integration V1 (docs/agent-integration/BRAIN_WORKFLOW_POLICY.md).
    * Coverage over tasks that left at least one trace -- see EventStore.getWorkflowAdherence's
    * doc comment (@brain/contracts) for what this can and can't see.
    */
+  usage?: UsageRanking[];
+  runtimeInstances?: number;
   workflow: { tasksTracked: number; tasksWithContext: number; tasksWithFeedback: number; tasksWithOutcome: number };
 }
 
@@ -33,7 +37,7 @@ export type ActivityItem =
   | { kind: "mutation"; timestamp: string; event: MemoryMutationEvent };
 
 export interface ContextListResponse {
-  items: ContextEvent[];
+  items: (ContextEvent & {outcome?: OutcomeValue | null})[];
 }
 
 export interface ContextDetailResponse {

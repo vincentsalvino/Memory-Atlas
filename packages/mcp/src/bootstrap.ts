@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { resolveRuntimeConfig } from "@brain/contracts";
+import { SqliteHarnessStore } from "@brain/storage";
 import { openDatabase } from "@brain/storage";
 import { SqliteMemoryRepository } from "@brain/storage";
 import { DEFAULT_MEMORY_RELEVANCE, SqliteRetrievalStore } from "@brain/storage";
@@ -29,13 +32,21 @@ export interface Brain {
   close(): void;
 }
 
-export function createBrain(dbPath: string, options: { localFilesOnly?: boolean; cacheDir?: string } = {}): Brain {
+export function createBrain(dbPath: string, options: { localFilesOnly?: boolean; cacheDir?: string; harnessId?: string } = {}): Brain {
+  const config = resolveRuntimeConfig(process.env);
   const db = openDatabase(dbPath);
+  const harnessId = options.harnessId ?? null;
+  const harnessStore = new SqliteHarnessStore(db.raw);
+  const instanceId = randomUUID();
+  const heartbeat = () => { try { harnessStore.heartbeat(instanceId, harnessId, config); } catch (error) { console.warn("Runtime heartbeat failed:", error); } };
+  heartbeat();
+  const timer = setInterval(heartbeat, 30_000);
+  timer.unref();
   const embeddings = new LocalEmbeddingProvider(options);
 
-  const memoryRepository = new SqliteMemoryRepository(db.raw, embeddings);
+  const memoryRepository = new SqliteMemoryRepository(db.raw, embeddings, harnessId);
   const retrievalStore = new SqliteRetrievalStore(db.raw, embeddings, db.vectorSearchAvailable, DEFAULT_MEMORY_RELEVANCE);
-  const eventStore = new SqliteEventStore(db.raw);
+  const eventStore = new SqliteEventStore(db.raw, harnessId);
   const codebaseRepository = new SqliteCodebaseRepository(db.raw);
   const codeSearchStore = new SqliteCodeSearchStore(db.raw, embeddings, db.vectorSearchAvailable);
   const codeDependencyStore = new SqliteCodeDependencyStore(db.raw);
@@ -46,16 +57,15 @@ export function createBrain(dbPath: string, options: { localFilesOnly?: boolean;
     new RetrievalService(retrievalStore),
     new EventService(eventStore),
     { vectorSearchAvailable: db.vectorSearchAvailable },
-    // 2C/2C.7: machinery in place, disabled pending live-pilot evidence strong
-    // enough to justify a default-enable decision (docs/archive/phase-2c/PHASE_2C7_REPORT.md).
-    { enabled: false, ...DEFAULT_NEAR_DUPLICATE_POLICY },
+    // User-authorized enablement; independent runtime flags support rollback.
+    { enabled: config.redundancyEnabled, ...DEFAULT_NEAR_DUPLICATE_POLICY },
     new CodeRetrievalService(codeSearchStore),
     new DependencyGraphService(codebaseRepository, codeDependencyStore),
-    // Phase 4.2 (F10): machinery wired end to end, DEFAULT_LEARNING_CONFIG.enabled
-    // stays false -- the default-enable decision belongs to Phase 4.3
-    // (docs/archive/phase-4/PHASE_4_DECISIONS.md F14/F15), same discipline as redundancy above.
-    new LearningSignalService(performanceStore, DEFAULT_LEARNING_CONFIG),
+    // Keep calibrated parameters; override only production enablement.
+    new LearningSignalService(performanceStore, { ...DEFAULT_LEARNING_CONFIG, enabled: config.learningEnabled }),
+    harnessId,
+    harnessStore,
   );
 
-  return { gateway, close: () => db.close() };
+  return { gateway, close: () => { clearInterval(timer); try { harnessStore.removeInstance(instanceId); } finally { db.close(); } } };
 }

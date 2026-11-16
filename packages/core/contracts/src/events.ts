@@ -15,6 +15,7 @@ import { DEPENDENCY_RELATIONS, type DependencyRelation } from "./context-source.
 
 export const RetrievalEventSchema = z
   .object({
+    harnessId: z.string().min(1).nullable().optional(),
     id: z.string().uuid(),
     timestamp: z.string().datetime(),
     scope: ScopeRefSchema,
@@ -51,6 +52,7 @@ export type ContextEventMemory = z.infer<typeof ContextEventMemorySchema>;
 
 export const ContextEventSchema = z
   .object({
+    harnessId: z.string().min(1).nullable().optional(),
     id: z.string().uuid(),
     timestamp: z.string().datetime(),
     retrievalEventId: z.string().uuid(),
@@ -121,6 +123,7 @@ export type OutcomeSignal = z.infer<typeof OutcomeSignalSchema>;
 
 export const OutcomeEventSchema = z
   .object({
+    harnessId: z.string().min(1).nullable().optional(),
     id: z.string().uuid(),
     timestamp: z.string().datetime(),
     taskId: z.string().min(1),
@@ -146,6 +149,7 @@ export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
 
 export const FeedbackEventSchema = z
   .object({
+    harnessId: z.string().min(1).nullable().optional(),
     id: z.string().uuid(),
     timestamp: z.string().datetime(),
     memoryId: z.string().uuid(),

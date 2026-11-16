@@ -88,13 +88,13 @@ test("getOverview: memory/event counts pass through countAllMemories/getEventCou
   assert.equal(overview.events.contextEvents, 0);
 });
 
-test("getOverview: vectorSearchAvailable/appliedMigrations come from injected capabilities; learning/redundancy are both false", async () => {
+test("getOverview: vectorSearchAvailable/appliedMigrations come from injected capabilities; learning/redundancy are unknown without a live instance", async () => {
   const { queryService } = setup();
   const overview = await queryService.getOverview();
   assert.equal(overview.vectorSearchAvailable, true);
   assert.deepEqual(overview.appliedMigrations, ["0001_initial_schema.sql"]);
-  assert.equal(overview.learning.enabled, false);
-  assert.equal(overview.redundancy.enabled, false);
+  assert.equal(overview.learning.enabled, null);
+  assert.equal(overview.redundancy.enabled, null);
 });
 
 test("getOverview: workflow passes through EventStore.getWorkflowAdherence unchanged", async () => {

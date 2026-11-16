@@ -91,14 +91,18 @@ count. "Bypassed" has no counter for the same reason: nowhere records a
 bypass reason today. Adding one is exactly the kind of new infrastructure
 this policy defers until the pilot below shows it's needed.
 
-These numbers must never feed `learning` or `redundancy` ranking -- both stay
-OFF by default, unaffected by this document.
+These numbers must never feed `learning` or `redundancy` ranking. Production
+enablement and independent rollback are documented in HARNESS_SETUP.md; the
+contract-level defaults remain disabled.
 
 ## Client provenance
 
-Not implemented. Do not self-report a `clientId` on tool calls. If it matters
-later, the MCP launcher/server stamps `claude-code` / `codex` as trusted
-metadata -- observational only, no ranking effect.
+Launcher identity is implemented as optional `--harness-id` metadata. Never
+self-report `harnessId` or `clientId` in tool inputs. The server stamps retrieval,
+context, feedback and outcome events. Private project scope access is checked
+against this identity. See [Harness setup](HARNESS_SETUP.md) for the trust model,
+setup/undo commands and skill/plugin usage reporting. Identity itself is not a
+ranking signal.
 
 ## Possible future harness (not built)
 

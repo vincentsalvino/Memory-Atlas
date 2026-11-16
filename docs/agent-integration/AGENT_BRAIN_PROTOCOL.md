@@ -10,11 +10,12 @@ see `BRAIN_WORKFLOW_POLICY.md` in this folder for task classification and the
 preflight/completion/bypass policy. Same split as above: that document is
 process, this one is mechanics.
 
-## The 10 tools
+## The tools
 
 `brain_context`, `brain_recall`, `brain_search`, `brain_remember`,
 `brain_update`, `brain_forget`, `brain_feedback`, `brain_record_outcome`,
-`brain_status`, `brain_project`.
+`brain_status`, `brain_project`, plus `brain_usage` and `brain_tool_rankings` for
+explicit skill/plugin reporting and usage rankings.
 
 ## Task start
 
@@ -73,7 +74,7 @@ with a `reason` (`"redundant"`, `"irrelevant"`, `"incorrect"`, or `"other"`) if
 it didn't. Always include the `contextId` from the delivery you're reporting
 on, the original `taskId`, and the `memoryId` of the specific memory. Review
 all delivered items and leave uncertain items unlabeled. Feedback supports future
-ranking (currently OFF by default — `DEFAULT_LEARNING_CONFIG.enabled = false` —
+ranking (enabled in production; the contract baseline remains disabled —
 see `docs/agent-integration/AGENT_INTEGRATION_FINDINGS.md` for why).
 
 ## Outcome recording
@@ -125,3 +126,14 @@ logic anywhere in your own integration — the protocol above applies
 identically regardless of which agent is connected. A client-specific
 instruction belongs in that client's own instruction file (`AGENTS.md`,
 `CLAUDE.md`), not here.
+
+## Harness attribution and private project context
+
+Launcher identity is server metadata, never a public tool argument. Use the
+[Harness setup guide](HARNESS_SETUP.md) for private scope syntax and trust limits.
+Shared project context/search includes the caller's private project knowledge.
+Identified feedback/outcomes must link to that launcher's own recorded delivery;
+feedback must name a delivered memory. Unknown clients cannot access private scopes.
+Skills/plugins may be reported through brain_usage only when their lifecycle is
+actually observed. Reports are distinct from automatic Brain-call telemetry and
+are not proof of token savings. Do not invent missing host activity.

@@ -44,9 +44,9 @@ export const forgetShape = {
   scope: ScopeRefSchema,
 };
 
-export const feedbackShape = FeedbackEventSchema.omit({ id: true, timestamp: true }).shape;
+export const feedbackShape = FeedbackEventSchema.omit({ id: true, timestamp: true, harnessId: true }).shape;
 
-export const recordOutcomeShape = OutcomeEventSchema.omit({ id: true, timestamp: true }).shape;
+export const recordOutcomeShape = OutcomeEventSchema.omit({ id: true, timestamp: true, harnessId: true }).shape;
 
 export const statusShape = {};
 

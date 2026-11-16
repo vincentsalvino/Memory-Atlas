@@ -12,5 +12,9 @@ export function scopeKey(scope: ScopeRef): string {
 }
 
 export function scopeLabel(scope: ScopeRef): string {
+  if (scope.kind === "project" && scope.id?.startsWith("harness:")) {
+    const parts = scope.id.split(":");
+    try { if (parts.length === 3) return `Private: ${decodeURIComponent(parts[1]!)}  /  ${decodeURIComponent(parts[2]!)}`; } catch { /* Show legacy malformed ids verbatim. */ }
+  }
   return scope.id ? `${scope.kind}: ${scope.id}` : scope.kind;
 }
