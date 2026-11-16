@@ -91,8 +91,8 @@ test("boundary: every registered tool handler calls exactly one gateway method",
   const source = readFileSync(join(mcpSrcDir, "server.ts"), "utf-8");
   const toolCount = [...source.matchAll(/server\.registerTool\(/g)].length;
   const gatewayCallCount = [...source.matchAll(/await gateway\.\w+\(/g)].length;
-  assert.equal(toolCount, 10, "expected all 10 brain_* tools from this task's MCP tool surface");
-  assert.equal(gatewayCallCount, toolCount, "each handler must call exactly one gateway method -- a mismatch means logic is leaking into, or missing from, the adapter");
+  assert.equal(toolCount, 12, "expected all 12 brain_* tools from this task's MCP tool surface");
+  assert.equal(gatewayCallCount, toolCount * 2, "each handler calls one operation plus best-effort telemetry");
 });
 
 test("boundary: Gateway stays transport-independent -- nothing in @brain/gateway imports the MCP SDK", () => {

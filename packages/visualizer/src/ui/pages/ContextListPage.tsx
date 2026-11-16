@@ -11,7 +11,7 @@ interface ContextListPageProps {
 }
 
 const PAGE_SIZE = 6;
-const DEFAULT_FILTERS = { query: "", scope: "", delivery: "", sort: "recent" };
+const DEFAULT_FILTERS = { query: "", scope: "", delivery: "", sort: "recent", harness: "" };
 
 export function ContextListPage({ onSelect }: ContextListPageProps) {
   const { data, error } = useFetch(api.listContexts, []);
@@ -27,8 +27,9 @@ export function ContextListPage({ onSelect }: ContextListPageProps) {
   const scopes = [...new Map(items.map(({ scope }) => [scopeKey(scope), scopeLabel(scope)]))]
     .sort((a, b) => a[1].localeCompare(b[1]));
   const query = filters.query.trim().toLowerCase();
-  const hasFilters = Boolean(filters.query || filters.scope || filters.delivery || filters.sort !== DEFAULT_FILTERS.sort);
+  const hasFilters = Boolean(filters.harness || filters.query || filters.scope || filters.delivery || filters.sort !== DEFAULT_FILTERS.sort);
   const matches = items.filter((ctx) => (
+    (!filters.harness || ctx.harnessId === filters.harness) &&
     (!filters.scope || filters.scope === scopeKey(ctx.scope)) &&
     (!filters.delivery || (filters.delivery === "included" ? ctx.includedMemoryIds.length > 0 : ctx.omittedMemoryIds.length > 0)) &&
     (!query || [ctx.id, ctx.taskId, scopeLabel(ctx.scope)].some((value) => value?.toLowerCase().includes(query)))
@@ -68,6 +69,12 @@ export function ContextListPage({ onSelect }: ContextListPageProps) {
             <option value="omitted">Has omitted memories</option>
           </select>
         </label>
+        <label className="filter-field">Harness (recent deliveries)
+          <select className="filter-input" value={filters.harness} onChange={e => updateFilter("harness", e.target.value)}>
+            <option value="">All harnesses</option>
+            {[...new Set(items.map(c => c.harnessId).filter(Boolean))].map(h => <option key={h} value={h!}>{h}</option>)}
+          </select>
+        </label>
         <label className="filter-field">
           Sort by
           <select className="filter-input" value={filters.sort} onChange={(event) => updateFilter("sort", event.target.value)}>
@@ -98,7 +105,7 @@ export function ContextListPage({ onSelect }: ContextListPageProps) {
                   <button type="button" className="context-row context-entry" onClick={() => onSelect(ctx.id)}>
                     <span className="context-identity">
                       <strong title={ctx.taskId ?? ctx.id}>{ctx.taskId ?? "(no task id)"}</strong>
-                      <span className="meta" title={ctx.id}>{scopeLabel(ctx.scope)} · {ctx.id.slice(0, 8)}</span>
+                      <span className="meta" title={ctx.id}>{scopeLabel(ctx.scope)}  /  {ctx.harnessId ?? "Unidentified"}{ctx.outcome ? `  /  ${ctx.outcome}` : ""} · {ctx.id.slice(0, 8)}</span>
                     </span>
                     <span className="context-number"><span className="context-mobile-label">Tokens</span>{ctx.tokenCount.toLocaleString()}</span>
                     <span className="context-number context-included"><span className="context-mobile-label">Included</span>{ctx.includedMemoryIds.length}</span>

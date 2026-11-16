@@ -1,5 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 
+import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -69,6 +71,8 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
       inputSchema: getContextShape,
     },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const pack = await gateway.getContext(
           omitUndefined({
@@ -79,9 +83,12 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
             taskId: args.taskId,
           }),
         );
+        succeeded = true;
         return ok(pack);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_context", succeeded, performance.now() - started);
       }
     },
   );
@@ -90,11 +97,16 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
     "brain_recall",
     { description: "Direct memory lookup by id, or by filter -- no ranking, no context compilation.", inputSchema: recallShape },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const result = await gateway.recall(omitUndefined(args));
+        succeeded = true;
         return ok(result);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_recall", succeeded, performance.now() - started);
       }
     },
   );
@@ -103,11 +115,16 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
     "brain_search",
     { description: "Ranked candidate search -- no token budget, no context compilation.", inputSchema: searchShape },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const results = await gateway.search(omitUndefined(args));
+        succeeded = true;
         return ok({ results });
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_search", succeeded, performance.now() - started);
       }
     },
   );
@@ -116,11 +133,16 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
     "brain_remember",
     { description: "Create a new memory.", inputSchema: rememberShape },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const record = await gateway.remember(args);
+        succeeded = true;
         return ok(record);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_remember", succeeded, performance.now() - started);
       }
     },
   );
@@ -129,12 +151,17 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
     "brain_update",
     { description: "Update an existing memory's content/domain/tags/confidence, or archive it via status.", inputSchema: updateShape },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const { scope, ...input } = args;
         const record = await gateway.update({ input, scope });
+        succeeded = true;
         return ok(record);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_update", succeeded, performance.now() - started);
       }
     },
   );
@@ -143,11 +170,16 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
     "brain_forget",
     { description: "Archive (soft delete) a memory. Never a hard purge.", inputSchema: forgetShape },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const record = await gateway.forget(args);
+        succeeded = true;
         return ok(record);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_forget", succeeded, performance.now() - started);
       }
     },
   );
@@ -161,11 +193,16 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
       inputSchema: feedbackShape,
     },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const event = await gateway.feedback(args);
+        succeeded = true;
         return ok(event);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_feedback", succeeded, performance.now() - started);
       }
     },
   );
@@ -178,11 +215,16 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
       inputSchema: recordOutcomeShape,
     },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const event = await gateway.recordOutcome(args);
+        succeeded = true;
         return ok(event);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_record_outcome", succeeded, performance.now() - started);
       }
     },
   );
@@ -191,11 +233,16 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
     "brain_status",
     { description: "Brain health and capability status.", inputSchema: statusShape },
     async (): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const status = await gateway.status();
+        succeeded = true;
         return ok(status);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_status", succeeded, performance.now() - started);
       }
     },
   );
@@ -204,14 +251,44 @@ export function registerBrainTools(server: McpServer, gateway: Gateway): void {
     "brain_project",
     { description: "Confirm a project scope and report its memory count.", inputSchema: projectShape },
     async (args): Promise<CallToolResult> => {
+      const started = performance.now();
+      let succeeded = false;
       try {
         const info = await gateway.project(args);
+        succeeded = true;
         return ok(info);
       } catch (error) {
         return toolError(error);
+      } finally {
+        await gateway.observeTool("brain_project", succeeded, performance.now() - started);
       }
     },
   );
+  server.registerTool("brain_usage", {
+    description: "Report a skill/plugin lifecycle observation. Reports are self-reported, not verified loading or cost evidence.",
+    inputSchema: { kind: z.enum(["skill", "plugin"]), identifier: z.string().min(1).max(256),
+      stage: z.enum(["installed", "exposed", "loaded", "invoked"]), projectId: z.string().min(1).max(256).nullable().default(null),
+      success: z.boolean().nullable().default(null), durationMs: z.number().nonnegative().nullable().default(null) },
+  }, async (args) => {
+    const started = performance.now();
+    let succeeded = false;
+    try { await gateway.recordUsage(args); succeeded = true;
+        return ok({ recorded: true, source: "reported" }); }
+    catch (error) { return toolError(error); }
+    finally { await gateway.observeTool("brain_usage", succeeded, performance.now() - started); }
+  });
+  server.registerTool("brain_tool_rankings", {
+    description: "Rank observed Brain calls and explicitly reported skills/plugins for this launcher identity; external activity may be unobserved.",
+    inputSchema: {},
+  }, async () => {
+    const started = performance.now();
+    let succeeded = false;
+    try { const result = await gateway.usageRankings(); succeeded = true;
+        return ok({ items: result }); }
+    catch (error) { return toolError(error); }
+    finally { await gateway.observeTool("brain_tool_rankings", succeeded, performance.now() - started); }
+  });
+
 }
 
 function ok(data: unknown): CallToolResult {
@@ -230,11 +307,17 @@ function toolError(error: unknown): CallToolResult {
 }
 
 /** Standalone entry point: `node dist/server.js <db-path>`. Not invoked by tests, which construct their own McpServer + in-memory Brain directly. */
-export async function main(dbPath = process.argv[2] ?? "./brain.db", options?: { cacheDir?: string; localFilesOnly?: boolean }): Promise<void> {
+export async function main(dbPath = process.argv[2] ?? "./brain.db", options?: { cacheDir?: string; localFilesOnly?: boolean; harnessId?: string }): Promise<void> {
   const { createBrain } = await import("./bootstrap.js");
-  const brain = createBrain(dbPath, options);
+  const harnessArg = process.argv.find(arg => arg.startsWith("--harness-id="))?.slice(13);
+  const harnessId = options?.harnessId ?? harnessArg;
+  if (harnessId !== undefined && !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(harnessId)) throw new Error("Invalid harness identity");
+  const brain = createBrain(dbPath, { ...options, ...(harnessId ? { harnessId } : {}) });
+  process.once("SIGTERM", () => { brain.close(); process.exit(0); });
+  process.once("SIGINT", () => { brain.close(); process.exit(0); });
 
-  const server = new McpServer({ name: "ai-brain", version: "0.1.0" }, { instructions: workflowInstructions });
+  const version = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {version: string}).version;
+  const server = new McpServer({ name: "ai-brain", version }, { instructions: workflowInstructions });
   registerBrainTools(server, brain.gateway);
 
   const transport = new StdioServerTransport();

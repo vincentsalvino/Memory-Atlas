@@ -51,8 +51,32 @@ try {
   writeFileSync(join(stage, 'package.json'), JSON.stringify({
     name, version, description: 'Brainded local memory MCP server', type: 'module',
     bin: { 'brain-mcp': './dist/cli.js' }, engines: { node: '>=24' },
-    files: ['dist/cli.js', 'migrations/*.sql'],
+    repository: { type: 'git', url: 'git+https://github.com/vincentsalvino/Memory-Atlas.git' },
+    homepage: 'https://github.com/vincentsalvino/Memory-Atlas#readme',
+    bugs: { url: 'https://github.com/vincentsalvino/Memory-Atlas/issues' },
+    publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' },
+    files: ['dist/cli.js', 'migrations/*.sql', 'npm-shrinkwrap.json'],
     dependencies: Object.fromEntries([...external].sort(([a], [b]) => a.localeCompare(b))),
+    overrides: readJson(join(root, 'package.json')).overrides,
+  }, null, 2) + '\n');
+
+  // Pin the complete production graph without executing dependency install scripts.
+  const locked = spawnSync(process.execPath, [process.env.npm_execpath, 'install', '--package-lock-only', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'], {
+    cwd: stage, encoding: 'utf8',
+  });
+  if (locked.error) throw locked.error;
+  if (locked.status !== 0) throw new Error(locked.stderr || 'Dependency lock generation failed');
+  copyFileSync(join(stage, 'package-lock.json'), join(stage, 'npm-shrinkwrap.json'));
+  const audited = spawnSync(process.execPath, [process.env.npm_execpath, 'audit', '--omit=dev', '--audit-level=high', '--json'], {
+    cwd: stage, encoding: 'utf8',
+  });
+  if (audited.error) throw audited.error;
+  const audit = JSON.parse(audited.stdout || '{}');
+  if (audited.status !== 0 || !audit.metadata?.vulnerabilities) throw new Error('Release dependency audit failed; inspect advisories before packaging');
+  writeFileSync(join(output, `${name}-${version}.audit.json`), JSON.stringify({
+    package: name, version, checkedAt: new Date().toISOString(), scope: 'production dependency graph',
+    vulnerabilities: audit.metadata.vulnerabilities,
+    limitation: 'Advisory snapshot, not proof of absence of vulnerabilities; dependency install scripts may run during npm installation.',
   }, null, 2) + '\n');
 
   await build({

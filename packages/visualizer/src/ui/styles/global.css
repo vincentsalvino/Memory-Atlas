@@ -1559,3 +1559,8 @@ button:disabled:hover {
 .inspector-related small {
   color: var(--text-secondary);
 }
+
+.usage-table { overflow-x: auto; }
+.usage-table table { width: 100%; border-collapse: collapse; text-align: left; }
+.usage-table th, .usage-table td { padding: 10px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+@media (max-width: 600px) { .overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

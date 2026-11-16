@@ -6,6 +6,7 @@ import {
   SqliteRetrievalStore,
   SqliteMemoryPerformanceStore,
   LocalEmbeddingProvider,
+  SqliteHarnessStore,
 } from "@brain/storage";
 import { VisualizerQueryService } from "./query-service.js";
 
@@ -33,6 +34,7 @@ export function createVisualizerBrain(dbPath: string): VisualizerBrain {
   const queryService = new VisualizerQueryService(memoryRepository, eventStore, retrievalStore, performanceStore, {
     vectorSearchAvailable: db.vectorSearchAvailable,
     appliedMigrations: appliedMigrations(db.raw),
+    harnessStore: new SqliteHarnessStore(db.raw),
   });
 
   return { queryService, close: () => db.close() };

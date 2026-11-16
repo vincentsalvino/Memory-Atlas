@@ -37,7 +37,7 @@ interface MemoryRow {
   updated_at: string;
 }
 
-function rowToRecord(row: MemoryRow): MemoryRecord {
+export function rowToRecord(row: MemoryRow): MemoryRecord {
   return {
     id: row.id,
     type: row.type as MemoryRecord["type"],
@@ -82,6 +82,7 @@ export class SqliteMemoryRepository implements MemoryRepository {
   constructor(
     private readonly db: Database.Database,
     private readonly embeddings: EmbeddingProvider,
+    private readonly harnessId: string | null = null,
   ) {}
 
   /** Writes the memory row and its mutation-audit row in one SQL transaction --
@@ -235,7 +236,7 @@ export class SqliteMemoryRepository implements MemoryRepository {
       {
         memoryId: updated.id,
         mutationType: input.status === "archived" ? "archive" : "update",
-        actor: { origin: "agent" },
+        actor: { origin: "agent", ...(this.harnessId ? { agentId: this.harnessId } : {}) },
         summary: input.status === "archived" ? "archived via update" : "updated fields",
       },
     );

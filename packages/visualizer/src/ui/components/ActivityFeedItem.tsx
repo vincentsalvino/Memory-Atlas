@@ -18,6 +18,7 @@ export function ActivityFeedItem({ item }: { item: ActivityItem }) {
     <div className="row-item" style={{ cursor: "default" }}>
       <span className="badge included">{item.kind}</span>
       <span>{describe(item)}</span>
+      {"harnessId" in item.event && item.event.harnessId && <span className="badge">{item.event.harnessId}</span>}
       <span className="meta mono">{item.timestamp}</span>
     </div>
   );

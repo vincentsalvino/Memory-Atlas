@@ -1,8 +1,9 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, basename } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -57,7 +58,8 @@ export function openDatabase(path: string, options?: { readonly?: boolean }): Br
   }
 
   if (!readonly) {
-    applyMigrations(db);
+    try { applyMigrations(db, path); }
+    catch (error) { db.close(); throw error; }
     if (vectorSearchAvailable) {
       ensureVectorTable(db);
       ensureCodeVectorTable(db);
@@ -102,7 +104,16 @@ const SCHEMA_MIGRATIONS_DDL = `CREATE TABLE IF NOT EXISTS schema_migrations (
  * what guarantees each runs exactly once; the transaction is what guarantees a
  * failure leaves nothing half-applied.
  */
-function applyMigrations(db: Database.Database): void {
+export function backupDatabase(db: Database.Database, path: string, reason: string): string {
+  if (path === ":memory:") throw new Error("A persistent database is required for a backup");
+  const directory = join(dirname(resolve(path)), ".brain-backups");
+  mkdirSync(directory, { recursive: true });
+  const backup = join(directory, `${basename(path)}-${reason}-${Date.now()}-${randomUUID()}.sqlite`);
+  db.prepare("VACUUM main INTO ?").run(backup);
+  return backup;
+}
+
+function applyMigrations(db: Database.Database, path: string): void {
   db.exec(SCHEMA_MIGRATIONS_DDL);
 
   const applied = new Set(
@@ -110,19 +121,36 @@ function applyMigrations(db: Database.Database): void {
   );
 
   const migrationsDir = join(__dirname, "..", "migrations");
-  const pending = readdirSync(migrationsDir)
+  const available = readdirSync(migrationsDir)
     .filter((file) => file.endsWith(".sql"))
-    .sort()
-    .filter((file) => !applied.has(file));
+    .sort();
+  if ([...applied].some(name => !available.includes(name))) {
+    throw new Error("Database schema is newer or unsupported by this installation; install a compatible release");
+  }
+  const pending = available.filter(file => !applied.has(file));
+  if (pending.length && path !== ":memory:" && db.prepare("SELECT 1 FROM sqlite_master WHERE name='memories'").get()) {
+    const backup = backupDatabase(db, path, "upgrade");
+    console.error(`Brain upgrade backup: ${backup}`);
+  }
 
   for (const file of pending) {
     const sql = readFileSync(join(migrationsDir, file), "utf-8");
     const record = db.prepare(`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`);
     db.transaction(() => {
+      // Another harness may have migrated this database while this process waited.
+      if (db.prepare("SELECT 1 FROM schema_migrations WHERE name=?").get(file)) return;
       db.exec(sql);
       record.run(file, new Date().toISOString());
-    })();
+    }).immediate();
   }
+}
+
+/** Maintenance must not silently discard fields from an unknown future schema. */
+export function assertCompatibleSchema(db: Database.Database): void {
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE name='schema_migrations'").get()) return;
+  const available = new Set(readdirSync(join(__dirname, "..", "migrations")).filter(name => name.endsWith(".sql")));
+  const applied = db.prepare("SELECT name FROM schema_migrations").all() as {name: string}[];
+  if (applied.some(row => !available.has(row.name))) throw new Error("Source database schema is newer or unsupported by this installation");
 }
 
 /** Migrations applied to this database, in application order. Diagnostics only. */

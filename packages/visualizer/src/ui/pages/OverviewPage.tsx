@@ -1,3 +1,4 @@
+import { UsagePanel } from "../components/UsagePanel";
 import { useState } from "react";
 import { api } from "../api-client";
 import { useFetch } from "../use-fetch";
@@ -89,6 +90,7 @@ export function OverviewPage() {
         )}
       </div>
 
+      {data && <UsagePanel rows={data.usage ?? []} />}
       <div className="overview-bottom">
         <section className="panel">
           <header className="dashboard-panel-header">
@@ -119,8 +121,10 @@ export function OverviewPage() {
               <>
                 <div>Vector search: {data.vectorSearchAvailable ? "available" : "unavailable"}</div>
                 <div>Applied migrations: {data.appliedMigrations.length}</div>
-                <div>Learning: {data.learning.enabled ? "ON" : "OFF (default)"}</div>
-                <div>Redundancy: {data.redundancy.enabled ? "ON" : "OFF (default)"}</div>
+                <div>Learning: {data.learning.enabled === null ? "Unknown / mixed" : data.learning.enabled ? "ON" : "OFF"}</div>
+                <div>Redundancy: {data.redundancy.enabled === null ? "Unknown / mixed" : data.redundancy.enabled ? "ON" : "OFF"}</div>
+                <div>Live MCP instances: {data.runtimeInstances ?? 0}</div>
+                <div>Local inspector: includes all harnesses.</div>
               </>
             ) : <SkeletonLines count={4} />}
           </div>

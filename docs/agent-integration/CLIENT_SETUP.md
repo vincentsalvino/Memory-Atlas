@@ -90,3 +90,8 @@ and run the [validation runner](../../packages/evaluation/validation/README.md)
 with `--task-id`. Check for recorded context, the exact linked outcome,
 and feedback for any clearly judged items. The [agent protocol](AGENT_BRAIN_PROTOCOL.md)
 documents the tool inputs.
+
+## Harness identity and usage reporting
+
+See [Harness setup](HARNESS_SETUP.md) for launcher identity, automatic JSON
+configuration, shared/private project memories, skill/plugin reporting and rollback.

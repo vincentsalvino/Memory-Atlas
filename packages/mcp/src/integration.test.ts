@@ -13,6 +13,7 @@ import {
   SqliteRetrievalStore,
   SqliteEventStore,
   SqliteMemoryPerformanceStore,
+  SqliteHarnessStore,
 } from "@brain/storage";
 import { MemoryService } from "@brain/memory";
 import { RetrievalService } from "@brain/retrieval";
@@ -37,12 +38,13 @@ import { registerBrainTools } from "./server.js";
 // task's Step 15: agent-agnosticism must hold for a client the Brain has never
 // seen, not just the ones on the shipping roadmap).
 
-function setup(learningConfig?: LearningConfig) {
+function setup(learningConfig?: LearningConfig, harnessId: string | null = null) {
   const db = openDatabase(":memory:");
   const embeddings = new FakeEmbeddingProvider();
   const memoryRepository = new SqliteMemoryRepository(db.raw, embeddings);
   const retrievalStore = new SqliteRetrievalStore(db.raw, embeddings, db.vectorSearchAvailable);
-  const eventStore = new SqliteEventStore(db.raw);
+  const eventStore = new SqliteEventStore(db.raw, harnessId);
+  const harnessStore = new SqliteHarnessStore(db.raw);
   const performanceStore = new SqliteMemoryPerformanceStore(db.raw);
   const gateway = new Gateway(
     new MemoryService(memoryRepository),
@@ -57,8 +59,10 @@ function setup(learningConfig?: LearningConfig) {
     // only whether it's ENABLED, defaulting to DEFAULT_LEARNING_CONFIG (disabled),
     // matching production's own bootstrap.ts default exactly.
     new LearningSignalService(performanceStore, learningConfig ?? DEFAULT_LEARNING_CONFIG),
+    harnessId,
+    harnessStore,
   );
-  return { db, eventStore, performanceStore, gateway };
+  return { db, eventStore, performanceStore, gateway, harnessStore };
 }
 
 async function connectCustomAgent(gateway: Gateway) {
@@ -82,11 +86,11 @@ function parsed(result: CallToolResult): any {
   return JSON.parse((result.content[0] as { text: string }).text);
 }
 
-test("custom agent: discovers the 10 brain_* tools through tools/list", async () => {
+test("custom agent: discovers the 12 brain_* tools through tools/list", async () => {
   const { db, gateway } = setup();
   const { client, close } = await connectCustomAgent(gateway);
   const { tools } = await client.listTools();
-  assert.equal(tools.length, 10);
+  assert.equal(tools.length, 12);
   assert.ok(tools.every((t) => t.name.startsWith("brain_")));
   await close();
   db.close();
@@ -607,4 +611,29 @@ test("P2-003: a pre-Phase-2B feedback payload (no contextId, no reason) is still
 
   await close();
   db.close();
+});
+
+
+test("wire: observed Brain calls and reported skill usage stay separate; telemetry failure preserves success", async (t) => {
+  const { db, gateway, harnessStore } = setup(undefined, "wire-test");
+  const {client, close} = await connectCustomAgent(gateway);
+  try {
+    const tools = await client.listTools();
+    for (const name of ["brain_feedback", "brain_record_outcome"]) {
+      assert(!("harnessId" in (tools.tools.find(tool => tool.name === name)!.inputSchema.properties ?? {})));
+    }
+    await client.callTool({name: "brain_status", arguments: {}});
+    await client.callTool({name: "brain_status", arguments: {}});
+    const failed = await client.callTool({name: "brain_recall", arguments: {scope: globalScope(), id: randomUUID()}});
+    assert.equal(failed.isError, true);
+    await client.callTool({name: "brain_usage", arguments: {kind: "skill", identifier: "review@1", stage: "loaded"}});
+    const rows = await harnessStore.rankings("wire-test");
+    assert.equal(rows.find(r => r.identifier === "brain_status")?.count, 2);
+    assert.equal(rows.find(r => r.identifier === "brain_recall")?.successRate, 0);
+    assert.equal(rows.find(r => r.identifier === "review@1")?.source, "reported");
+    t.mock.method(console, "warn", () => {});
+    t.mock.method(harnessStore, "recordUsage", async () => { throw new Error("disk failure"); });
+    const successful = await client.callTool({name: "brain_status", arguments: {}});
+    assert(!successful.isError);
+  } finally { await close(); db.close(); }
 });

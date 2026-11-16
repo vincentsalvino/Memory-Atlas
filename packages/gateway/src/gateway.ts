@@ -1,3 +1,4 @@
+import { privateScopeOwner, privateProjectScope, type ScopeRef, type HarnessObservability, type UsageEvent } from "@brain/contracts";
 import {
   type Candidate,
   type ContextEventMemory,
@@ -100,10 +101,49 @@ export class Gateway {
     // themselves: this class does not re-implement the enabled check, it just
     // threads the one LearningSignalService instance's own config through.
     private readonly learning?: LearningSignalService,
+    private readonly harnessId: string | null = null,
+    private readonly observability?: HarnessObservability,
   ) {}
+
+  private authorize(scope: ScopeRef): void {
+    try {
+      const owner = privateScopeOwner(scope);
+      if (owner !== null && owner !== this.harnessId) throw notFound("memory not found in this scope");
+    } catch (error) {
+      if (error instanceof BrainError) throw error;
+      throw invalidRequest("Malformed harness-private project scope");
+    }
+  }
+
+  private async candidatesFor(text: string, scope: ScopeRef, limit: number, filters?: SearchRequest["filters"]): Promise<Candidate[]> {
+    this.authorize(scope);
+    const scopes = [scope];
+    if (this.harnessId && scope.kind === "project" && !scope.id!.startsWith("harness:")) {
+      scopes.push(privateProjectScope(this.harnessId, scope.id!));
+    }
+    const batches = await Promise.all(scopes.map(scope => this.retrieval.getCandidates({ text, scope, limit, filters })));
+    return [...new Map(batches.flat().map(c => [c.memoryId, c])).values()];
+  }
+
+  async recordUsage(event: Omit<UsageEvent, "harnessId" | "source">): Promise<void> {
+    if (!this.observability) throw invalidRequest("Usage tracking is unavailable");
+    await this.observability.recordUsage({ ...event, harnessId: this.harnessId, source: "reported" });
+  }
+
+  async usageRankings(): Promise<unknown> {
+    return this.observability ? this.observability.rankings(this.harnessId) : [];
+  }
+
+  async observeTool(name: string, success: boolean, durationMs: number): Promise<void> {
+    try {
+      await this.observability?.recordUsage({ kind: "tool", identifier: name, stage: "invoked", source: "observed",
+        harnessId: this.harnessId, projectId: null, success, durationMs });
+    } catch (error) { console.warn("Usage telemetry unavailable:", error); }
+  }
 
   /** brain_context: the full retrieval -> ranking -> context -> budget pipeline. */
   async getContext(request: GetContextRequest): Promise<ContextDelivery> {
+    this.authorize(request.scope);
     this.requireNonEmpty(request.task, "task");
 
     // P2-015: stage timings, measured around the four existing calls with a
@@ -113,7 +153,7 @@ export class Gateway {
     let candidates: Candidate[];
     const retrievalStart = performance.now();
     try {
-      candidates = await this.retrieval.getCandidates({ text: request.task, scope: request.scope, limit: DEFAULT_CANDIDATE_LIMIT });
+      candidates = await this.candidatesFor(request.task, request.scope, DEFAULT_CANDIDATE_LIMIT);
       if (this.learning) candidates = await this.learning.decorate(candidates);
     } catch (error) {
       throw this.wrapUnexpected(error, "retrieval failed");
@@ -469,13 +509,14 @@ export class Gateway {
   private async requireKnownContext(contextId: string | null | undefined): Promise<void> {
     if (contextId === null || contextId === undefined) return;
     const contextEvent = await this.events.getContextEvent(contextId);
-    if (!contextEvent) {
+    if (!contextEvent || (contextEvent.harnessId && contextEvent.harnessId !== this.harnessId)) {
       throw invalidRequest(`contextId ${contextId} does not reference a recorded context delivery`);
     }
   }
 
   /** brain_recall: direct id/filter lookup -- no ranking, no context compilation. */
   async recall(request: RecallRequest): Promise<MemoryResult | MemoryRecord> {
+    this.authorize(request.scope);
     if (request.id) {
       const record = await this.memory.get(request.id, request.scope);
       if (!record) throw notFound(`memory ${request.id} not found in this scope`);
@@ -492,15 +533,11 @@ export class Gateway {
 
   /** brain_search: ranked candidates, no budget enforcement, no context compilation. */
   async search(request: SearchRequest): Promise<RankedResult[]> {
+    this.authorize(request.scope);
     this.requireNonEmpty(request.text, "text");
     let candidates;
     try {
-      candidates = await this.retrieval.getCandidates({
-        text: request.text,
-        scope: request.scope,
-        limit: request.limit ?? DEFAULT_CANDIDATE_LIMIT,
-        filters: request.filters,
-      });
+      candidates = await this.candidatesFor(request.text, request.scope, request.limit ?? DEFAULT_CANDIDATE_LIMIT, request.filters);
       if (this.learning) candidates = await this.learning.decorate(candidates);
     } catch (error) {
       throw this.wrapUnexpected(error, "search failed");
@@ -520,8 +557,11 @@ export class Gateway {
 
   /** brain_remember */
   async remember(request: RememberRequest): Promise<MemoryRecord> {
+    this.authorize(request.scope);
     try {
-      return await this.memory.create(request);
+      const { agentId: _untrustedAgentId, ...source } = request.source ?? {};
+      return await this.memory.create({ ...request, source: { ...source,
+        ...(this.harnessId ? { origin: "agent", agentId: this.harnessId } : {}) } });
     } catch (error) {
       throw this.wrapValidationOrUnexpected(error);
     }
@@ -529,6 +569,7 @@ export class Gateway {
 
   /** brain_update */
   async update(request: UpdateRequest): Promise<MemoryRecord> {
+    this.authorize(request.scope);
     try {
       return await this.memory.update(request.input, request.scope);
     } catch (error) {
@@ -538,6 +579,7 @@ export class Gateway {
 
   /** brain_forget: archives (soft delete). Never a hard purge. */
   async forget(request: ForgetRequest): Promise<MemoryRecord> {
+    this.authorize(request.scope);
     try {
       return await this.memory.archive(request.id, request.scope);
     } catch (error) {
@@ -548,6 +590,14 @@ export class Gateway {
   /** brain_feedback */
   async feedback(request: FeedbackRequest): Promise<FeedbackEvent> {
     await this.requireKnownContext(request.contextId);
+    if (this.harnessId && !request.contextId) throw invalidRequest("Identified harness feedback requires contextId");
+    if (!request.contextId && !await this.memory.get(request.memoryId, {kind: "global", id: null})) {
+      throw invalidRequest("Project feedback requires a linked context delivery");
+    }
+    if (request.contextId) {
+      const context = await this.events.getContextEvent(request.contextId);
+      if (!context?.includedMemoryIds.includes(request.memoryId)) throw invalidRequest("Feedback memory was not delivered in this context");
+    }
     return this.events.recordFeedback(request);
   }
 
@@ -564,6 +614,7 @@ export class Gateway {
 
   /** brain_project: minimal -- confirms a project scope and reports its memory count. Not a project-management system. */
   async project(request: ProjectRequest): Promise<ProjectInfo> {
+    this.authorize({kind: "project", id: request.projectId});
     this.requireNonEmpty(request.projectId, "projectId");
     const result = await this.memory.query({
       scope: { kind: "project", id: request.projectId },

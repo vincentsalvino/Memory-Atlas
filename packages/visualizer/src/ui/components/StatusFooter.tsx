@@ -16,10 +16,10 @@ export function StatusFooter({ learningEnabled, redundancyEnabled }: StatusFoote
         <Icon name="database" /> SQLite (readonly)
       </span>
       <span>
-        <Dot on={learningEnabled} /> Learning {learningEnabled === null ? "..." : learningEnabled ? "ON" : "OFF"}
+        <Dot on={learningEnabled} /> Learning {learningEnabled === null ? "unknown / mixed" : learningEnabled ? "ON" : "OFF"}
       </span>
       <span>
-        <Dot on={redundancyEnabled} /> Redundancy {redundancyEnabled === null ? "..." : redundancyEnabled ? "ON" : "OFF"}
+        <Dot on={redundancyEnabled} /> Redundancy {redundancyEnabled === null ? "unknown / mixed" : redundancyEnabled ? "ON" : "OFF"}
       </span>
       <span style={{ marginLeft: "auto" }}>
         <Dot on={true} /> local-only, no network
