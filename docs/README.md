@@ -16,6 +16,8 @@ current implementation and archived phase findings when assessing what ships.
 
 ## Agent integration
 
+- [Updates, migration backups and memory merging](agent-integration/UPDATES_AND_MERGING.md)
+
 - [Harness setup, private project memory and usage tracking](agent-integration/HARNESS_SETUP.md)
 
 - [Client setup and portable instructions](agent-integration/CLIENT_SETUP.md)

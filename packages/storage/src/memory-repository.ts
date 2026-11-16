@@ -37,7 +37,7 @@ interface MemoryRow {
   updated_at: string;
 }
 
-function rowToRecord(row: MemoryRow): MemoryRecord {
+export function rowToRecord(row: MemoryRow): MemoryRecord {
   return {
     id: row.id,
     type: row.type as MemoryRecord["type"],

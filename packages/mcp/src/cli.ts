@@ -16,9 +16,24 @@ Run the Brainded MCP server over stdio. The default database is ~/.brainded/brai
 --config prints an MCP host configuration for this installation.
 --harness-id=NAME sets trusted launcher identity for private project access.
 --setup CONFIG.json --harness-id=NAME --database=PATH installs a JSON MCP entry.
---undo-setup CONFIG.json removes the unchanged entry installed by setup.`;
+--undo-setup CONFIG.json removes the unchanged entry installed by setup.
+--upgrade [database-path] backs up and applies pending database migrations.
+--merge-db SOURCE --into TARGET previews a memory snapshot merge.
+--merge-db SOURCE --into TARGET --apply --digest=HASH applies the reviewed preview.
+--reindex-db PATH rebuilds semantic memory indexes (may download model weights).`;
 
 async function run(args: string[]): Promise<void> {
+  if (args[0] === "--merge-db") {
+    const [ , source, intoFlag, target, ...flags ] = args;
+    const apply = flags.includes("--apply");
+    const digest = flags.find(flag => flag.startsWith("--digest="))?.slice(9);
+    if (!source || intoFlag !== "--into" || !target || flags.some(flag => flag !== "--apply" && !flag.startsWith("--digest=")) || (apply !== Boolean(digest))) {
+      throw new Error("Usage: brain-mcp --merge-db SOURCE --into TARGET [--apply --digest=PREVIEW_DIGEST]");
+    }
+    const { mergeMemoryDatabases } = await import("./bootstrap.js");
+    console.log(JSON.stringify(mergeMemoryDatabases(resolve(source), resolve(target), apply ? digest : undefined), null, 2));
+    return;
+  }
   const setupMode = args[0] === "--setup" || args[0] === "--undo-setup";
   if (setupMode) {
     const [mode, configPath, ...flags] = args;
@@ -44,12 +59,12 @@ async function run(args: string[]): Promise<void> {
     console.log(manifest.version);
     return;
   }
-  const mode = first === "--check" || first === "--config" ? first : undefined;
+  const mode = first === "--check" || first === "--config" || first === "--upgrade" || first === "--reindex-db" ? first : undefined;
   const givenPath = mode ? second : first;
   if (args.length > (mode ? 2 : 1) || givenPath?.startsWith("-")) throw new Error(help);
 
   const dataDir = join(homedir(), ".brainded");
-  const dbPath = givenPath ? resolve(givenPath) : join(dataDir, "brain.db");
+  const dbPath = givenPath ? resolve(givenPath) : process.env.BRAIN_DB_PATH ? resolve(process.env.BRAIN_DB_PATH) : join(dataDir, "brain.db");
   if (mode === "--config") {
     console.log(JSON.stringify({ mcpServers: { "ai-brain": { command: process.execPath, args: [fileURLToPath(import.meta.url), dbPath, ...(harnessArg ? [harnessArg] : [])] } } }, null, 2));
     return;
@@ -61,6 +76,18 @@ async function run(args: string[]): Promise<void> {
     cacheDir: process.env.BRAIN_MODEL_CACHE_DIR ? resolve(process.env.BRAIN_MODEL_CACHE_DIR) : join(dataDir, "models"),
     localFilesOnly: process.env.BRAIN_LOCAL_FILES_ONLY === "1",
   };
+  if (mode === "--upgrade") {
+    const { upgradeMemoryDatabase } = await import("./bootstrap.js");
+    console.log(JSON.stringify(upgradeMemoryDatabase(dbPath), null, 2));
+    return;
+  }
+  if (mode === "--reindex-db") {
+    const { reindexMemories } = await import("./bootstrap.js");
+    const result = await reindexMemories(dbPath, options);
+    console.log(JSON.stringify(result));
+    if (result.failed) process.exitCode = 1;
+    return;
+  }
   if (mode === "--check") {
     const { createBrain } = await import("./bootstrap.js");
     const brain = createBrain(dbPath, options);

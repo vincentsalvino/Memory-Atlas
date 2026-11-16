@@ -17,6 +17,21 @@ import { EventService, LearningSignalService } from "@brain/learning";
 import { DEFAULT_LEARNING_CONFIG } from "@brain/contracts";
 import { DependencyGraphService } from "@brain/codebase";
 import { Gateway } from "@brain/gateway";
+import { previewMemoryMerge, applyMemoryMerge, reindexMemoryDatabase, appliedMigrations } from "@brain/storage";
+
+export function mergeMemoryDatabases(source: string, target: string, reviewedDigest?: string) {
+  return reviewedDigest === undefined ? previewMemoryMerge(source, target) : applyMemoryMerge(source, target, reviewedDigest);
+}
+
+export function upgradeMemoryDatabase(path: string) {
+  const db = openDatabase(path);
+  try { return { database: path, migrations: appliedMigrations(db.raw) }; }
+  finally { db.close(); }
+}
+
+export function reindexMemories(path: string, options: {cacheDir?: string; localFilesOnly?: boolean}) {
+  return reindexMemoryDatabase(path, new LocalEmbeddingProvider(options));
+}
 
 /**
  * The ONE file in this repository allowed to import both a concrete

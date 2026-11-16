@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -315,7 +316,8 @@ export async function main(dbPath = process.argv[2] ?? "./brain.db", options?: {
   process.once("SIGTERM", () => { brain.close(); process.exit(0); });
   process.once("SIGINT", () => { brain.close(); process.exit(0); });
 
-  const server = new McpServer({ name: "ai-brain", version: "0.1.0" }, { instructions: workflowInstructions });
+  const version = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {version: string}).version;
+  const server = new McpServer({ name: "ai-brain", version }, { instructions: workflowInstructions });
   registerBrainTools(server, brain.gateway);
 
   const transport = new StdioServerTransport();

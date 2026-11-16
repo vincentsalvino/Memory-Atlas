@@ -14,6 +14,45 @@ and give each new session a better starting point.
 [Getting started](#getting-started) · [Feedback](#try-it-and-share-feedback) ·
 [Documentation](docs/README.md)
 
+## Public release
+
+Download the installer, checksum and dependency-audit snapshot from
+[Memory Atlas v0.1.1](https://github.com/vincentsalvino/Memory-Atlas/releases/tag/v0.1.1).
+Verify the tarball with the accompanying `SHA256SUMS.txt`, then install:
+
+```sh
+npm install --global ./brainded-mcp-0.1.1.tgz
+brain-mcp --version
+brain-mcp --config
+```
+
+On Linux, use `sha256sum --check SHA256SUMS.txt`. In PowerShell, use
+`Get-FileHash .\brainded-mcp-0.1.1.tgz -Algorithm SHA256` and compare the value
+with `SHA256SUMS.txt`. Download both from the official release page. The npm
+distributable is named `brainded-mcp`; registry installation/update availability
+is tracked separately from the downloadable GitHub release.
+
+## Security and data safety
+
+Release packages contain the server, database migrations, README and a locked
+production dependency graph; they exclude local databases, credentials, host
+configuration and private planning notes. Packaging audits the runtime dependency
+graph and blocks known high/critical advisories. The release includes SHA-256
+checksums and an audit snapshot. These checks reduce risk; they do not establish
+that software is free of vulnerabilities or independently signed.
+
+Your database remains outside the installed package. Upgrades snapshot existing
+data before pending migrations, and memory merging requires a reviewed preview.
+Neither operation automatically imports native Codex/Claude memory. Harness
+isolation is enforced at the Brain API; local users/processes with filesystem
+access and the read-only visualizer can inspect all records. Database/backups
+are not encrypted by Memory Atlas: protect their location and access permissions.
+
+See [SECURITY.md](SECURITY.md) for reporting vulnerabilities privately, release
+verification and the trust model, and the
+[update/merge guide](docs/agent-integration/UPDATES_AND_MERGING.md) for backups,
+rollback and safe consolidation.
+
 ## Why it exists
 
 A project's useful context grows over time: architecture decisions, conventions,
@@ -68,7 +107,7 @@ Use **Node.js 24 or newer** and npm. For a fresh checkout:
 
 ```sh
 git clone https://github.com/vincentsalvino/Memory-Atlas.git
-cd Brainded
+cd Memory-Atlas
 npm ci
 npm run check
 ```
@@ -189,13 +228,17 @@ See the [validation runner](packages/evaluation/validation/README.md) and
 
 ## Install Brain on another device
 
+See [updates and memory merging](docs/agent-integration/UPDATES_AND_MERGING.md)
+for npm-based release replacement, automatic backup/migration on reconnect,
+and previewed consolidation of separate Codex/Claude Brain databases.
+
 Build an npm tarball with `npm run package:mcp`. Copy the resulting
-`.release/brainded-mcp-0.1.0.tgz` to a device with Node.js 24 or newer.
+`.release/brainded-mcp-0.1.1.tgz` to a device with Node.js 24 or newer.
 To keep an existing artifact, pass a different output directory with
 `npm run package:mcp -- <output-directory>`.
 
 ```sh
-npm install --global ./brainded-mcp-0.1.0.tgz
+npm install --global ./brainded-mcp-0.1.1.tgz
 brain-mcp --check
 brain-mcp --config
 ```
