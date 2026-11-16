@@ -16,12 +16,14 @@ brain-mcp --version
 
 The distributable is currently named **brainded-mcp**; the product name is
 Memory Atlas. The repository's private workspace `@brain/mcp` is not the
-distributable. This change prepares a 0.1.1 tarball; it does not publish a package.
+distributable. Version 0.1.1 is published on npm and as a GitHub release, with
+matching tarballs.
 
-For an installation from a verified, published registry release channel, npm's
-global update command is `npm update --global brainded-mcp`. Until that release
-channel is published by the project owner, update with the project-produced
-tarball instead. Do not install an unrelated similarly named package. npm updates
+The verified registry release is
+[`brainded-mcp`](https://www.npmjs.com/package/brainded-mcp). Install it with
+`npm install --global brainded-mcp@0.1.1`; subsequent registry updates use
+`npm update --global brainded-mcp`. Tarball installation remains available.
+Do not install an unrelated similarly named package. npm updates
 local dependencies within their semver ranges; a global update targets the
 registry's wanted version. [npm update documentation](https://docs.npmjs.com/cli/v11/commands/npm-update/)
 
