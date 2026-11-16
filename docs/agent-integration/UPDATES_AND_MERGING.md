@@ -10,19 +10,21 @@ Build the portable release from this checkout:
 
 ```sh
 npm run package:mcp
-npm install --global ./.release/brainded-mcp-0.1.1.tgz
+npm install --global ./.release/beanvincentcat-memory-atlas-0.1.1.tgz
 brain-mcp --version
 ```
 
-The distributable is currently named **brainded-mcp**; the product name is
-Memory Atlas. The repository's private workspace `@brain/mcp` is not the
-distributable. Version 0.1.1 is published on npm and as a GitHub release, with
-matching tarballs.
+The distributable is **@beanvincentcat/memory-atlas**. The repository's private
+workspace `@brain/mcp` is not the distributable. The unscoped `memory-atlas`
+package belongs to another publisher. To replace the retired `brainded-mcp`
+package, uninstall it, install Memory Atlas, and regenerate MCP configuration
+using your existing absolute database path. Existing memories remain outside
+the npm installation.
 
 The verified registry release is
-[`brainded-mcp`](https://www.npmjs.com/package/brainded-mcp). Install it with
-`npm install --global brainded-mcp@0.1.1`; subsequent registry updates use
-`npm update --global brainded-mcp`. Tarball installation remains available.
+[`@beanvincentcat/memory-atlas`](https://www.npmjs.com/package/@beanvincentcat/memory-atlas). Install it with
+`npm install --global @beanvincentcat/memory-atlas@0.1.1`; subsequent registry updates use
+`npm update --global @beanvincentcat/memory-atlas`. Tarball installation remains available.
 Do not install an unrelated similarly named package. npm updates
 local dependencies within their semver ranges; a global update targets the
 registry's wanted version. [npm update documentation](https://docs.npmjs.com/cli/v11/commands/npm-update/)
