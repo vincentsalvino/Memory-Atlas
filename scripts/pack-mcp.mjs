@@ -9,9 +9,10 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const lock = readJson(join(root, 'package-lock.json')).packages;
 const { version, dependencies } = readJson(join(root, 'packages/mcp/package.json'));
-const name = 'brainded-mcp';
+const name = '@beanvincentcat/memory-atlas';
 const output = resolve(process.argv[2] ?? join(root, '.release'));
-const tarball = join(output, `${name}-${version}.tgz`);
+const artifactName = name.replace(/^@/, '').replace('/', '-');
+const tarball = join(output, `${artifactName}-${version}.tgz`);
 if (process.argv.length > 3) throw new Error('Usage: npm run package:mcp -- [output-directory]');
 if (!process.env.npm_execpath) throw new Error('Run this script through npm run package:mcp');
 if (existsSync(tarball)) throw new Error(`Release already exists: ${tarball}`);
@@ -49,7 +50,7 @@ try {
   }
   copyFileSync(join(root, 'scripts/installer-readme.md'), join(stage, 'README.md'));
   writeFileSync(join(stage, 'package.json'), JSON.stringify({
-    name, version, description: 'Brainded local memory MCP server', type: 'module',
+    name, version, description: 'Memory Atlas: shared local memory and context for AI coding agents', type: 'module',
     bin: { 'brain-mcp': './dist/cli.js' }, engines: { node: '>=24' },
     repository: { type: 'git', url: 'git+https://github.com/vincentsalvino/Memory-Atlas.git' },
     homepage: 'https://github.com/vincentsalvino/Memory-Atlas#readme',
@@ -66,14 +67,21 @@ try {
   });
   if (locked.error) throw locked.error;
   if (locked.status !== 0) throw new Error(locked.stderr || 'Dependency lock generation failed');
-  copyFileSync(join(stage, 'package-lock.json'), join(stage, 'npm-shrinkwrap.json'));
+  const releaseLock = readJson(join(stage, 'package-lock.json'));
+  // npm's global installer otherwise invents a node-gyp build for prebuilt SQLite.
+  for (const [dependency, pinnedVersion] of external) {
+    const manifest = readJson(join(root, 'node_modules', dependency, 'package.json'));
+    if (manifest.version !== pinnedVersion) throw new Error(`Installed dependency differs from lock: ${dependency}`);
+    if (manifest.gypfile === false) releaseLock.packages[`node_modules/${dependency}`].gypfile = false;
+  }
+  writeFileSync(join(stage, 'npm-shrinkwrap.json'), JSON.stringify(releaseLock, null, 2) + '\n');
   const audited = spawnSync(process.execPath, [process.env.npm_execpath, 'audit', '--omit=dev', '--audit-level=high', '--json'], {
     cwd: stage, encoding: 'utf8',
   });
   if (audited.error) throw audited.error;
   const audit = JSON.parse(audited.stdout || '{}');
   if (audited.status !== 0 || !audit.metadata?.vulnerabilities) throw new Error('Release dependency audit failed; inspect advisories before packaging');
-  writeFileSync(join(output, `${name}-${version}.audit.json`), JSON.stringify({
+  writeFileSync(join(output, `${artifactName}-${version}.audit.json`), JSON.stringify({
     package: name, version, checkedAt: new Date().toISOString(), scope: 'production dependency graph',
     vulnerabilities: audit.metadata.vulnerabilities,
     limitation: 'Advisory snapshot, not proof of absence of vulnerabilities; dependency install scripts may run during npm installation.',

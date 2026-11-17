@@ -3,13 +3,13 @@
 Install the release tarball with Node.js 24 or newer.
 
 ```text
-npm install --global ./brainded-mcp-0.1.1.tgz
+npm install --global @beanvincentcat/memory-atlas@0.1.1
 brain-mcp --check
 brain-mcp --config
 ```
 
 Add the generated `ai-brain` entry to your local MCP client and reconnect.
-The command in the entry launches Brainded over stdio. In the client, call
+The command in the entry launches Memory Atlas over stdio. In the client, call
 `brain_status` to verify the connection. The default database lives at
 `~/.brainded/brain.db`. Pass an absolute database path after `--check` or
 `--config` to select an existing database.
@@ -29,8 +29,10 @@ Use `brain-mcp --upgrade /absolute/database/path` for an explicit offline upgrad
 Older releases refuse a newer migration ledger rather than silently downgrading.
 There is no background updater or postinstall database mutation.
 
-For a verified published registry release, use `npm update --global brainded-mcp`.
-This tarball does not itself establish or publish that registry release channel.
+Use `npm update --global @beanvincentcat/memory-atlas` for registry updates.
+The unscoped `memory-atlas` package belongs to another publisher. The former
+`brainded-mcp` package is retired; uninstall it before switching to this package,
+then regenerate MCP configuration using your existing absolute database path.
 
 ## Combining separate Brain databases
 
