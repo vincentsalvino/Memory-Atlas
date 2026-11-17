@@ -29,7 +29,7 @@ so both harnesses continue to share the same stored memories.
 
 Download the installer, checksum and dependency-audit snapshot from
 [Memory Atlas v0.1.1](https://github.com/vincentsalvino/Memory-Atlas/releases/tag/v0.1.1).
-Verify the tarball with the accompanying `SHA256SUMS.txt`, then install:
+Verify the tarball with the accompanying `MEMORY-ATLAS-SHA256SUMS.txt`, then install:
 
 ```sh
 npm install --global ./beanvincentcat-memory-atlas-0.1.1.tgz
@@ -37,9 +37,9 @@ brain-mcp --version
 brain-mcp --config
 ```
 
-On Linux, use `sha256sum --check SHA256SUMS.txt`. In PowerShell, use
+On Linux, use `sha256sum --check MEMORY-ATLAS-SHA256SUMS.txt`. In PowerShell, use
 `Get-FileHash .\beanvincentcat-memory-atlas-0.1.1.tgz -Algorithm SHA256` and compare
-the value with `SHA256SUMS.txt`. Download both from the official release page.
+the value with `MEMORY-ATLAS-SHA256SUMS.txt`. Download both from the official release page.
 Use the scoped npm name above: the unscoped `memory-atlas` belongs to another
 publisher. The earlier `brainded-mcp` package is retired. To switch, uninstall it
 with `npm uninstall --global brainded-mcp`, install Memory Atlas, and regenerate
