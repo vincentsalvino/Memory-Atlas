@@ -180,9 +180,65 @@ async function main() {
     const child = spawn(process.execPath, [serverEntry, opts.dbPath], {
       cwd: repoRoot,
       env: { ...process.env, PORT: String(opts.port), BRAIN_DB_PATH: opts.dbPath },
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "inherit"],
     });
-    child.on("exit", (code) => process.exit(code ?? 0));
+    if (child.pid) {
+      writeFileSync(pidFileFor(opts.port), String(child.pid), "utf8");
+    }
+    const shutdown = () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      try {
+        unlinkSync(pidFileFor(opts.port));
+      } catch {
+        // ignore
+      }
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+
+    let overview = null;
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      overview = await fetchOverview(opts.port);
+      if (overview) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    if (!overview) {
+      shutdown();
+      throw new Error(`Visualizer server (pid ${child.pid ?? "unknown"}) did not respond on ${url}/api/overview within 8s`);
+    }
+
+    const opened = opts.openBrowser ? openUrlInBrowser(url) : false;
+    console.log(
+      JSON.stringify(
+        {
+          url,
+          port: opts.port,
+          dbPath: opts.dbPath,
+          pid: child.pid ?? null,
+          alreadyRunning: false,
+          opened,
+          overview: summarizeOverview(overview),
+        },
+        null,
+        2,
+      ),
+    );
+    await new Promise((resolveExit) => {
+      child.on("exit", (code) => {
+        try {
+          unlinkSync(pidFileFor(opts.port));
+        } catch {
+          // ignore
+        }
+        process.exitCode = code ?? 0;
+        resolveExit();
+      });
+    });
     return;
   }
 

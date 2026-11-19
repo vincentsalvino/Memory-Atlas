@@ -9,28 +9,24 @@ Start (or reuse) the read-only Memory Atlas visualizer server and open it so the
 
 ## Steps
 
-1. Run the launcher script from the Memory Atlas repository root (or pass its absolute path when installed globally):
+1. Start the launcher in `--foreground` mode as a **long-running background daemon** (`IsDaemon: true` in Antigravity, or background shell task in Claude Code / Codex) so the host process manager does not reap the HTTP server on exit:
 
    ```sh
-   npm run visualize
+   node scripts/launch-visualizer.mjs --foreground
    ```
 
-   Or invoke directly with optional flags:
+   *(If the visualizer is already running on port 4173, the launcher automatically reuses it, opens the URL, prints the JSON status, and exits cleanly.)*
 
-   ```sh
-   node scripts/launch-visualizer.mjs [--db <path>] [--port <port>] [--no-open] [--status] [--stop]
-   ```
-
+   Pass through any optional flags requested by the user:
    - `--db <path>` — inspect a specific SQLite database (defaults to `data/brain.db`)
    - `--port <port>` — override port (defaults to `4173`)
    - `--no-open` — start/check the server without opening the system browser
-   - `--status` — check if the visualizer is running and print live stats
-   - `--stop` — cleanly stop the managed background visualizer server
+   - `--status` — check if the visualizer is running and print live stats (normal non-daemon call)
+   - `--stop` — cleanly stop the running visualizer server (normal non-daemon call)
 
-2. Parse the JSON output and report back concisely:
+2. Report back concisely using the printed JSON output:
    - Clickable URL (e.g. `http://localhost:4173`)
    - Whether the server was freshly started or already running
    - Live overview counts (`memoriesActive` / `memoriesTotal`, `contexts`, `runtimeInstances`, `vectorSearchAvailable`)
-   - If the user wants to inspect it inside the agent's browser UI, open the URL with the browser tool.
 
 The visualizer opens SQLite in driver-enforced read-only mode and never modifies `brain.db`.

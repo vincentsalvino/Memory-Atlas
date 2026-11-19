@@ -45,44 +45,47 @@ export function ContextListPage({ onSelect }: ContextListPageProps) {
         <p>Find a recent delivery and open its trace to see which memories were included or omitted.</p>
       </header>
 
-      <div className="context-filters" role="group" aria-label="Filter context deliveries">
-        <label className="filter-field">
-          Search
+      <div className="context-filters filter-bar" role="group" aria-label="Filter context deliveries">
+        <label className="compact-search-field">
+          <span className="sr-only">Search</span>
           <span className="search-field">
             <Icon name="search" />
-            <input className="filter-input" type="search" placeholder="Task, context ID, or scope"
+            <input className="filter-input" type="search" placeholder="Search task, context ID, or scope..."
               value={filters.query} onChange={(event) => updateFilter("query", event.target.value)} />
           </span>
         </label>
-        <label className="filter-field">
-          Scope
-          <select className="filter-input" value={filters.scope} onChange={(event) => updateFilter("scope", event.target.value)}>
-            <option value="">All scopes</option>
-            {scopes.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
-        </label>
-        <label className="filter-field">
-          Memory selection
-          <select className="filter-input" value={filters.delivery} onChange={(event) => updateFilter("delivery", event.target.value)}>
-            <option value="">Any delivery</option>
-            <option value="included">Has included memories</option>
-            <option value="omitted">Has omitted memories</option>
-          </select>
-        </label>
-        <label className="filter-field">Harness (recent deliveries)
-          <select className="filter-input" value={filters.harness} onChange={e => updateFilter("harness", e.target.value)}>
-            <option value="">All harnesses</option>
-            {[...new Set(items.map(c => c.harnessId).filter(Boolean))].map(h => <option key={h} value={h!}>{h}</option>)}
-          </select>
-        </label>
-        <label className="filter-field">
-          Sort by
-          <select className="filter-input" value={filters.sort} onChange={(event) => updateFilter("sort", event.target.value)}>
-            <option value="recent">Newest first</option>
-            <option value="tokens">Most tokens</option>
-          </select>
-        </label>
-        <button type="button" className="text-button" disabled={!hasFilters}
+        <div className="filter-group">
+          <label className="compact-select-field">
+            <span>Scope</span>
+            <select className="filter-input compact-select" value={filters.scope} onChange={(event) => updateFilter("scope", event.target.value)}>
+              <option value="">All scopes</option>
+              {scopes.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
+          <label className="compact-select-field">
+            <span>Memory selection</span>
+            <select className="filter-input compact-select" value={filters.delivery} onChange={(event) => updateFilter("delivery", event.target.value)}>
+              <option value="">Any delivery</option>
+              <option value="included">Has included</option>
+              <option value="omitted">Has omitted</option>
+            </select>
+          </label>
+          <label className="compact-select-field">
+            <span>Harness (recent deliveries)</span>
+            <select className="filter-input compact-select" value={filters.harness} onChange={e => updateFilter("harness", e.target.value)}>
+              <option value="">All harnesses</option>
+              {[...new Set(items.map(c => c.harnessId).filter(Boolean))].map(h => <option key={h} value={h!}>{h}</option>)}
+            </select>
+          </label>
+          <label className="compact-select-field">
+            <span>Sort by</span>
+            <select className="filter-input compact-select" value={filters.sort} onChange={(event) => updateFilter("sort", event.target.value)}>
+              <option value="recent">Newest first</option>
+              <option value="tokens">Most tokens</option>
+            </select>
+          </label>
+        </div>
+        <button type="button" className="text-button compact-reset" disabled={!hasFilters}
           onClick={() => { setFilters(DEFAULT_FILTERS); setPage(0); }}>Reset</button>
       </div>
 
