@@ -10,7 +10,9 @@ Run commands from the repository root after `npm ci`:
 | `npm run build` | Build libraries before the MCP server and visualizer |
 | `npm run typecheck` | Build dependency declarations and typecheck every workspace |
 | `npm test` | Run default tests after a build |
-| `npm run dev` | Start the visualizer against an initialized database |
+| `npm run dev` | Start the Vite visualizer dev server against an initialized database |
+| `npm run visualize` | Launch (or reuse) the production read-only visualizer on port 4173 |
+| `npm run sync:native` | Mirror native harness memories read-only into dedicated entries in `data/brain.db` |
 | `npm run mcp` | Start the MCP stdio server with `data/brain.db` |
 
 For a focused test after building dependencies:
@@ -79,6 +81,6 @@ build(workspaces): build shared dependencies before applications
 fix(ci): run repository checks from the checkout root
 ```
 
-Commit source, tests, configuration, documentation, and the npm lockfile. Keep
-credentials, `.env` files, runtime databases, generated output, and local agent
+Commit source, tests, configuration, documentation, portable skills under `.agents/skills/`, and the npm lockfile. Keep
+credentials, `.env` files, runtime databases, `.brain-backups/`, generated output, check logs, local graph indexes (`graphify-out/`), and local agent
 state out of commits.

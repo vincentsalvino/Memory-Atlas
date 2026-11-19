@@ -43,3 +43,12 @@ provenance and conflicting versions are preserved; native chat memory is not
 automatically imported. Shared database paths need no merge. Imported records
 are keyword-searchable; `brain-mcp --reindex-db TARGET` rebuilds semantic indexes
 using the local embedding model and may download weights unless restricted.
+
+## Opt-in native harness memory mirroring
+
+`brain-mcp --sync-native [DATABASE] [--dry-run] [--watch]` mirrors native
+harness memories (Claude Code, Codex, Antigravity, or `--source=NAME:PATH`)
+strictly read-only into dedicated `native-mirror:*` entries without modifying
+native files or existing Brain-authored memories. Native files remain
+authoritative: edits update or supersede their mirrored entries, deletions
+soft-archive only the mirror, and a backup snapshot is taken before any write.

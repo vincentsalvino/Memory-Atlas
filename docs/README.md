@@ -10,6 +10,10 @@ Start with the [project README](../README.md) for setup and commands, or
 - [Architecture review](architecture/ARCHITECTURE_REVIEW.md): design rationale and risks.
 - [Merge matrix](architecture/MERGE_MATRIX.md): predecessor component decisions.
 - [Visualizer architecture](architecture/VISUALIZER_ARCHITECTURE.md): read-only inspection UI.
+- [Direction and validation plan](architecture/BRAIN_EVIDENCE_PLAN.md): evidence harness, relevance calibration, and ranked next capabilities.
+- [Shared harness memory and usage observability](architecture/ENHANCEMENT_PLAN.md): harness scopes, runtime flags, and usage telemetry plan.
+- [Session continuity plan](architecture/SESSION_CONTINUITY_PLAN.md): inspector resize fix, session leases, subscribed libraries, and cross-harness handoff design.
+- [Token and cost research](architecture/TOKEN_COST_RESEARCH.md): primary-source payload budgeting, prompt caching, and tool-loading evidence.
 
 The architecture documents include proposed and deferred capabilities. Check the
 current implementation and archived phase findings when assessing what ships.

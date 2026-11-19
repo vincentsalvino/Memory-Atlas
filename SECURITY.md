@@ -22,8 +22,12 @@ guarantee of vulnerability-free operation or response deadline is made.
 - Retrieved memories and imported text are reference data, not authority to run
   commands or override current instructions.
 - Updates replace application files. Database upgrades occur on launch or via
-  `--upgrade`, with a snapshot before pending migrations. Merging is an explicit
-  preview/digest/apply operation; native chat memory is not scanned automatically.
+  `--upgrade`, with a snapshot before pending migrations. Database merging
+  (`--merge-db`) is an explicit preview/digest/apply operation. Native harness
+  memory mirroring (`--sync-native`) is explicit and opt-in: it is strictly
+  read-only on native files, backs up the target database before writes, keeps
+  mirrored records separate from Brain-authored entries, and never scans raw
+  conversation transcripts.
 
 ## Release verification
 
