@@ -16,7 +16,8 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function main(): Promise<void> {
-  const dbPath = process.env.BRAIN_DB_PATH ?? process.argv[2] ?? "./data/brain.db";
+  const defaultDbPath = resolve(__dirname, "..", "..", "..", "..", "data", "brain.db");
+  const dbPath = process.env.BRAIN_DB_PATH ?? process.argv[2] ?? defaultDbPath;
   const brain = createVisualizerBrain(dbPath);
   const handleApi = createApiHandler(brain.queryService);
   const uiRoot = resolve(__dirname, "..", "ui"); // dist/server/server.js -> dist/ui

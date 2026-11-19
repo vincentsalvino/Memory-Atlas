@@ -11,3 +11,5 @@ export * from "./memory-performance-store.js";
 export * from "./harness-store.js";
 
 export * from "./memory-merge.js";
+
+export * from "./native-sync.js";
