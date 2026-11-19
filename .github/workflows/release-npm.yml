@@ -1,0 +1,116 @@
+name: Release to npm
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-npm-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: check / pack / publish npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Check whether version is already published
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p '
+            const v = JSON.parse(require("node:fs").readFileSync("packages/mcp/package.json", "utf8")).version;
+            if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(v)) process.exit(1);
+            v;
+          ')
+          echo "value=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          PUBLISHED=$(npm view "@beanvincentcat/memory-atlas@${VERSION}" version 2>/dev/null || true)
+          if [ "${PUBLISHED}" = "${VERSION}" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "@beanvincentcat/memory-atlas@${VERSION} is already published on npm; skipping release."
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Ready to publish @beanvincentcat/memory-atlas@${VERSION}."
+          fi
+
+      - name: Install dependencies
+        if: steps.version.outputs.should_publish == 'true'
+        run: npm ci
+
+      - name: Run full repository checks
+        if: steps.version.outputs.should_publish == 'true'
+        run: npm run check
+
+      - name: Package audited MCP release tarball
+        if: steps.version.outputs.should_publish == 'true'
+        run: npm run package:mcp
+
+      - name: Generate SHA-256 checksums and smoke-test tarball install
+        if: steps.version.outputs.should_publish == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          TARBALL="beanvincentcat-memory-atlas-${VERSION}.tgz"
+          (cd .release && sha256sum "${TARBALL}" > MEMORY-ATLAS-SHA256SUMS.txt)
+          (cd .release && sha256sum --check MEMORY-ATLAS-SHA256SUMS.txt)
+
+          SMOKE_DIR=$(mktemp -d)
+          trap 'rm -rf "${SMOKE_DIR}"' EXIT
+          npm install --prefix "${SMOKE_DIR}" "./.release/${TARBALL}"
+          "${SMOKE_DIR}/node_modules/.bin/brain-mcp" --version
+          "${SMOKE_DIR}/node_modules/.bin/brain-mcp" --check "${SMOKE_DIR}/smoke.db"
+
+      - name: Ensure npm supports OIDC Trusted Publishing
+        if: steps.version.outputs.should_publish == 'true'
+        run: npm install --global npm@latest
+
+      - name: Publish tarball to npm
+        if: steps.version.outputs.should_publish == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          TARBALL=".release/beanvincentcat-memory-atlas-${VERSION}.tgz"
+          if [ -n "${NPM_TOKEN}" ]; then
+            npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
+          fi
+          npm publish "${TARBALL}" --access public --provenance
+
+      - name: Create GitHub Release with release artifacts
+        if: steps.version.outputs.should_publish == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${TAG} already exists; skipping creation."
+            exit 0
+          fi
+          gh release create "${TAG}" \
+            ".release/beanvincentcat-memory-atlas-${VERSION}.tgz" \
+            ".release/beanvincentcat-memory-atlas-${VERSION}.audit.json" \
+            ".release/MEMORY-ATLAS-SHA256SUMS.txt" \
+            --target "${GITHUB_SHA}" \
+            --title "Memory Atlas ${TAG}" \
+            --generate-notes
