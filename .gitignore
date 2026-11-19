@@ -4,20 +4,30 @@ dist/
 dist-test/
 coverage/
 .cache/
+.vite/
 *.tsbuildinfo
 *.log
+*.tgz
+*.bak
 
 # Local databases, backups, and environment configuration
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
 *.sqlite3
+.brain-backups/
+*.brain-setup.json
+*.brain-*.tmp
 .env
 .env.*
 !.env.example
 
-# Optional reference repositories and local agent state
+# Optional reference repositories and local agent/tool state
 /references/
 /.worktrees/
 /.superpowers/
@@ -25,6 +35,10 @@ coverage/
 /.codex/
 /.validation/
 /.release/
+/graphify-out/
+/.agents/skills/graphify/
+/.agents/rules/graphify.md
+/.agents/workflows/
 
 # Operating-system and editor files
 .DS_Store
@@ -32,3 +46,7 @@ Thumbs.db
 Desktop.ini
 *.swp
 *.swo
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

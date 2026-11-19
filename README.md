@@ -92,7 +92,8 @@ precedence.
 | Relevant retrieval | Combine keyword and semantic search to find useful memories. |
 | Bounded context | Compile ranked context within a requested token budget, including code and dependency context when the project has indexed code. |
 | Feedback and outcomes | Record which delivered memories helped and how the task ended. |
-| Read-only visualizer | Inspect memories, context deliveries, and workflow activity in a local web UI. |
+| Opt-in native mirroring | Mirror native harness memories (Claude Code, Codex, Antigravity) read-only into dedicated, authoritative entries via `--sync-native` or `/brain-merge`. |
+| Read-only visualizer | Inspect memories, context deliveries, and workflow activity in a local web UI (`npm run visualize` or `/brain-visualize`). |
 
 The default server uses SQLite and local embeddings. The first semantic operation
 can download model weights. Feedback and outcome recording are available today;
@@ -206,22 +207,55 @@ node packages/visualizer/dist/server/server.js data/brain.db
 
 The production server defaults to port 4173; `PORT` overrides it.
 
+To launch (or reuse) the production read-only visualizer in the background and
+open it from any workspace or agent chat (via `/brain-visualize`):
+
+```sh
+npm run visualize
+node scripts/launch-visualizer.mjs --status
+node scripts/launch-visualizer.mjs --stop
+```
+
+## Mirror native harness memories (`/brain-merge`)
+
+Harnesses configured with the same database path already share `brain_*`
+memories directly. To also make native harness memories (Claude Code
+`~/.claude/projects/*/memory/*.md`, Codex `~/.codex/memories*`, Antigravity
+`~/.gemini/antigravity/knowledge/`) searchable across harnesses without editing
+native files or mixing them with Brain-authored entries:
+
+```sh
+npm run sync:native -- --dry-run
+npm run sync:native
+npm run sync:native -- --watch
+```
+
+Native files remain strictly read-only and authoritative: mirrored rows carry
+dedicated `native-mirror:<harness>:*` provenance and `native-authoritative`
+tags, update or supersede when their native source changes, soft-archive if
+deleted at the source, and never overwrite existing Brain memories. An automatic
+backup is written before any mutation. See
+[updates and memory merging](docs/agent-integration/UPDATES_AND_MERGING.md) for
+full details.
+
 ## Repository layout
 
 ```text
 packages/
   core/             Contracts, memory, retrieval, ranking, context, token
                     budgeting, compression, learning, and test fixtures
-  storage/          SQLite repositories, embeddings, and SQL migrations
+  storage/          SQLite repositories, embeddings, migrations, DB merge, and native sync
   codebase/         File discovery, indexing, and dependency graph
   gateway/          Client-independent orchestration
   knowledge/        Seed validation, import, and query helpers
   evaluation/       Datasets, evaluation gates, and pilot harnesses
-  mcp/              MCP stdio adapter and composition root
+  mcp/              MCP stdio adapter, CLI, and composition root
   visualizer/       Read-only HTTP API, shared types, and React UI
+.agents/skills/     Portable agent slash-command skills (/brain-visualize, /brain-merge)
+scripts/            Visualizer launcher, npm release packager, and smoke tests
 docs/
-  architecture/     Architecture and package-boundary references
-  agent-integration/ Shared agent protocol and workflow policy
+  architecture/     Architecture, plans, and package-boundary references
+  agent-integration/ Shared agent protocol, setup, merging, and workflow policy
   archive/          Historical audits, phase plans, and reports
 data/               Local runtime databases (ignored by Git)
 .github/workflows/  Continuous integration

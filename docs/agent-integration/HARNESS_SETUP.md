@@ -116,3 +116,21 @@ never reads its own environment as proof of MCP state. Reload to refresh.
 Keep additive migration columns/tables on application rollback. Do not drop
 columns from the live database. Remove a generated setup entry with `--undo-setup`
 only after confirming it is the intended host configuration.
+
+## Chat slash commands (`/brain-visualize` and `/brain-merge`)
+
+Portable skills live in `.agents/skills/brain-visualize/SKILL.md` and
+`.agents/skills/brain-merge/SKILL.md`:
+
+- `/brain-visualize` launches (or reuses) the read-only production visualizer via
+  `scripts/launch-visualizer.mjs` and opens `http://localhost:4173` (supports
+  `--db`, `--port`, `--no-open`, `--status`, and `--stop`).
+- `/brain-merge` runs `brain-mcp --sync-native` to mirror native harness memories
+  (Claude Code, Codex, Antigravity) read-only into dedicated, non-conflicting
+  `native-mirror:*` entries in the shared database (supports `--dry-run`,
+  `--watch`, `--harness=<name>`, `--source=<name>:<path>`, and `--no-embed`).
+
+To make these commands available from any project chat (not only inside this
+repository), install copies with absolute paths in each harness's global skills
+or commands directory (`~/.gemini/config/skills/`, `~/.claude/commands/`, and
+`~/.codex/skills/`).

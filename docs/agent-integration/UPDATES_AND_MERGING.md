@@ -126,10 +126,24 @@ to require an existing cache. Failed indexing leaves memory content intact and
 keyword retrieval available. Reindex only current active revisions; content
 changed during embedding is skipped rather than indexed with stale vectors.
 
-## Native Codex/Claude memory
+## Native harness memory mirroring (opt-in)
 
-An application update never imports native memory files. Those files can contain
-private, project-specific or stale instructions. A future importer must preview
-explicitly selected files, identify their source and destination scope, and obtain
-approval for the distilled content. There is no automatic filesystem-wide scan,
-scope promotion or transcript synchronization in this update flow.
+An application update never imports native memory files automatically. When you
+explicitly want Claude Code, Codex, and Antigravity to cross-reference each
+other's native memories without modifying any native files or mixing them with
+Brain-authored entries, run the read-only mirror command:
+
+```sh
+brain-mcp --sync-native /path/shared-brain.db --dry-run
+brain-mcp --sync-native /path/shared-brain.db
+brain-mcp --sync-native /path/shared-brain.db --watch
+```
+
+Mirrored items are written as dedicated `origin: "import"` records with
+`sourceRef: "native-mirror:<harness>:..."` and tags
+`["native-mirror", "native-authoritative", "native-source:<harness>"]`. Native
+files are never modified and remain authoritative: edits at the native source
+update or supersede the mirrored entry, deletions soft-archive only the mirror,
+and existing Brain-authored memories are untouched. An automatic `VACUUM INTO`
+backup is taken before any write. Raw conversation transcripts are never
+imported.

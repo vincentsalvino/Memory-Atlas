@@ -90,9 +90,12 @@ error instead of being accepted.
 ## Native memory coexistence
 
 Memory Atlas (`@brain/mcp`) is the shared, cross-agent, durable memory layer —
-not a replacement for Claude's or Codex's own native/session memory, and not
-synchronized with either. Nothing here scrapes, imports, or mirrors
-client-native memory, and nothing should.
+not a replacement for Claude's or Codex's own native/session memory, and never
+mutates or automatically scrapes client-native files. If a user explicitly wants
+other harnesses to cross-reference native memories, the opt-in read-only
+`brain-mcp --sync-native` command mirrors them into dedicated
+`native-mirror:<harness>:*` entries while keeping the native files untouched and
+authoritative (see [Updates and merging](UPDATES_AND_MERGING.md)).
 
 Ownership stays split three ways:
 - **Memory Atlas** — durable knowledge another agent, or a future session,

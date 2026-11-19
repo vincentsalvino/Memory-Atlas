@@ -20,9 +20,88 @@ Run the Brainded MCP server over stdio. The default database is ~/.brainded/brai
 --upgrade [database-path] backs up and applies pending database migrations.
 --merge-db SOURCE --into TARGET previews a memory snapshot merge.
 --merge-db SOURCE --into TARGET --apply --digest=HASH applies the reviewed preview.
+--sync-native [database-path] [--dry-run] [--watch] [--harness=NAME] [--source=NAME:PATH] [--no-embed] [--no-backup]
+       mirrors native harness memories (Claude, Codex, Antigravity) read-only into dedicated Brain entries.
 --reindex-db PATH rebuilds semantic memory indexes (may download model weights).`;
 
 async function run(args: string[]): Promise<void> {
+  if (args[0] === "--sync-native") {
+    const rest = args.slice(1);
+    let givenDb: string | undefined;
+    let dryRun = false;
+    let watchMode = false;
+    let embed = true;
+    let backup = true;
+    const harnesses: string[] = [];
+    const customSources: { harness: string; path: string }[] = [];
+
+    for (const token of rest) {
+      if (token === "--dry-run") dryRun = true;
+      else if (token === "--watch") watchMode = true;
+      else if (token === "--no-embed") embed = false;
+      else if (token === "--no-backup") backup = false;
+      else if (token.startsWith("--harness=")) {
+        const name = token.slice(10).trim();
+        if (!name) throw new Error("--harness=NAME requires a harness name");
+        harnesses.push(name);
+      } else if (token.startsWith("--source=")) {
+        const spec = token.slice(9);
+        const sep = spec.indexOf(":");
+        if (sep <= 0 || sep === spec.length - 1) throw new Error("--source=NAME:PATH requires both harness name and path");
+        customSources.push({ harness: spec.slice(0, sep).trim(), path: spec.slice(sep + 1).trim() });
+      } else if (token.startsWith("-")) {
+        throw new Error(`Unknown flag for --sync-native: ${token}`);
+      } else if (!givenDb) {
+        givenDb = token;
+      } else {
+        throw new Error("Usage: brain-mcp --sync-native [database-path] [--dry-run] [--watch] [--harness=NAME] [--source=NAME:PATH] [--no-embed] [--no-backup]");
+      }
+    }
+
+    const dataDir = join(homedir(), ".brainded");
+    const dbPath = givenDb ? resolve(givenDb) : process.env.BRAIN_DB_PATH ? resolve(process.env.BRAIN_DB_PATH) : join(dataDir, "brain.db");
+    if (!givenDb || dbPath === join(dataDir, "brain.db")) mkdirSync(dataDir, { recursive: true });
+
+    const syncOptions = {
+      ...(harnesses.length ? { harnesses } : {}),
+      ...(customSources.length ? { customSources } : {}),
+      dryRun,
+      backup,
+      embed,
+      cacheDir: process.env.BRAIN_MODEL_CACHE_DIR ? resolve(process.env.BRAIN_MODEL_CACHE_DIR) : join(dataDir, "models"),
+      localFilesOnly: process.env.BRAIN_LOCAL_FILES_ONLY === "1",
+    };
+
+    const { syncNativeMemorySources, watchNativeMemorySources } = await import("./bootstrap.js");
+    const initial = await syncNativeMemorySources(dbPath, syncOptions);
+    console.log(JSON.stringify(initial, null, 2));
+
+    if (watchMode && !dryRun) {
+      const handle = watchNativeMemorySources(
+        dbPath,
+        syncOptions,
+        (result) => {
+          if (result.added || result.updated || result.superseded || result.archived) {
+            console.log(JSON.stringify(result));
+          }
+        },
+        (error) => {
+          console.error("Native sync watch error:", error instanceof Error ? error.message : String(error));
+        },
+      );
+      console.error(`Watching native memory directories (${handle.watchedPaths.length}): ${handle.watchedPaths.join(", ")}`);
+      await new Promise<void>((resolveStop) => {
+        const stop = () => {
+          handle.close();
+          resolveStop();
+        };
+        process.once("SIGINT", stop);
+        process.once("SIGTERM", stop);
+      });
+    }
+    return;
+  }
+
   if (args[0] === "--merge-db") {
     const [ , source, intoFlag, target, ...flags ] = args;
     const apply = flags.includes("--apply");

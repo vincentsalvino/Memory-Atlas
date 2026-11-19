@@ -17,10 +17,71 @@ import { EventService, LearningSignalService } from "@brain/learning";
 import { DEFAULT_LEARNING_CONFIG } from "@brain/contracts";
 import { DependencyGraphService } from "@brain/codebase";
 import { Gateway } from "@brain/gateway";
-import { previewMemoryMerge, applyMemoryMerge, reindexMemoryDatabase, appliedMigrations } from "@brain/storage";
+import {
+  previewMemoryMerge,
+  applyMemoryMerge,
+  reindexMemoryDatabase,
+  appliedMigrations,
+  syncNativeMemories,
+  watchNativeMemories,
+  type CustomNativeSource,
+  type NativeSyncResult,
+} from "@brain/storage";
 
 export function mergeMemoryDatabases(source: string, target: string, reviewedDigest?: string) {
   return reviewedDigest === undefined ? previewMemoryMerge(source, target) : applyMemoryMerge(source, target, reviewedDigest);
+}
+
+export function syncNativeMemorySources(
+  dbPath: string,
+  options: {
+    homeDir?: string;
+    harnesses?: string[];
+    customSources?: CustomNativeSource[];
+    dryRun?: boolean;
+    backup?: boolean;
+    embed?: boolean;
+    cacheDir?: string;
+    localFilesOnly?: boolean;
+  } = {},
+) {
+  const embeddings = options.embed === false ? undefined : new LocalEmbeddingProvider(options);
+  return syncNativeMemories({
+    dbPath,
+    ...(options.homeDir !== undefined ? { homeDir: options.homeDir } : {}),
+    ...(options.harnesses !== undefined ? { harnesses: options.harnesses } : {}),
+    ...(options.customSources !== undefined ? { customSources: options.customSources } : {}),
+    ...(options.dryRun !== undefined ? { dryRun: options.dryRun } : {}),
+    ...(options.backup !== undefined ? { backup: options.backup } : {}),
+    ...(embeddings !== undefined ? { embeddings } : {}),
+  });
+}
+
+export function watchNativeMemorySources(
+  dbPath: string,
+  options: {
+    homeDir?: string;
+    harnesses?: string[];
+    customSources?: CustomNativeSource[];
+    embed?: boolean;
+    cacheDir?: string;
+    localFilesOnly?: boolean;
+  } = {},
+  onSync?: (result: NativeSyncResult) => void,
+  onError?: (error: unknown) => void,
+) {
+  const embeddings = options.embed === false ? undefined : new LocalEmbeddingProvider(options);
+  return watchNativeMemories(
+    {
+      dbPath,
+      ...(options.homeDir !== undefined ? { homeDir: options.homeDir } : {}),
+      ...(options.harnesses !== undefined ? { harnesses: options.harnesses } : {}),
+      ...(options.customSources !== undefined ? { customSources: options.customSources } : {}),
+      ...(embeddings !== undefined ? { embeddings } : {}),
+    },
+    onSync,
+    onError,
+  );
 }
 
 export function upgradeMemoryDatabase(path: string) {
