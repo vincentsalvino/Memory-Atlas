@@ -3,7 +3,7 @@
 Install the release tarball with Node.js 24 or newer.
 
 ```text
-npm install --global @beanvincentcat/memory-atlas@0.2.0
+npm install --global @beanvincentcat/memory-atlas@0.2.1
 brain-mcp --check
 brain-mcp --config
 ```

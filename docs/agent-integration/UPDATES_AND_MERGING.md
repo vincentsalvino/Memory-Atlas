@@ -10,7 +10,7 @@ Build the portable release from this checkout:
 
 ```sh
 npm run package:mcp
-npm install --global ./.release/beanvincentcat-memory-atlas-0.2.0.tgz
+npm install --global ./.release/beanvincentcat-memory-atlas-0.2.1.tgz
 brain-mcp --version
 ```
 
@@ -23,7 +23,7 @@ the npm installation.
 
 The verified registry release is
 [`@beanvincentcat/memory-atlas`](https://www.npmjs.com/package/@beanvincentcat/memory-atlas). Install it with
-`npm install --global @beanvincentcat/memory-atlas@0.2.0`; subsequent registry updates use
+`npm install --global @beanvincentcat/memory-atlas@0.2.1`; subsequent registry updates use
 `npm update --global @beanvincentcat/memory-atlas`. Tarball installation remains available.
 Do not install an unrelated similarly named package. npm updates
 local dependencies within their semver ranges; a global update targets the
