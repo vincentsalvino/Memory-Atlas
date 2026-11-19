@@ -95,14 +95,19 @@ export function OverviewPage() {
         <section className="panel">
           <header className="dashboard-panel-header">
             <h2 className="icon-label"><Icon name="pulse" />Recent Activity</h2>
-            <select className="filter-input" aria-label="Activity type" value={activityKind}
-              onChange={(event) => setActivityKind(event.target.value)}>
-              <option value="all">All events</option>
-              <option value="context">Contexts</option>
-              <option value="feedback">Feedback</option>
-              <option value="outcome">Outcomes</option>
-              <option value="mutation">Memory changes</option>
-            </select>
+            <div className="filter-group">
+              <label className="compact-select-field">
+                <span>Show</span>
+                <select className="filter-input compact-select" aria-label="Activity type" value={activityKind}
+                  onChange={(event) => setActivityKind(event.target.value)}>
+                  <option value="all">All events</option>
+                  <option value="context">Contexts</option>
+                  <option value="feedback">Feedback</option>
+                  <option value="outcome">Outcomes</option>
+                  <option value="mutation">Memory changes</option>
+                </select>
+              </label>
+            </div>
           </header>
           {!activity ? (
             <div className="panel-body"><SkeletonLines count={5} /></div>
