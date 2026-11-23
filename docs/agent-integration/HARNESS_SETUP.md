@@ -12,27 +12,37 @@ brain-mcp --config /absolute/path/brain.db --harness-id=codex
 For a source checkout replace `brain-mcp` with
 `node /absolute/path/ai-brain/packages/mcp/dist/cli.js`.
 
-## Repeatable JSON configuration setup
+## Repeatable JSON and Codex TOML configuration setup
 
-For hosts accepting an `mcpServers` JSON object:
+For hosts accepting an `mcpServers` JSON object or Codex's `[mcp_servers.ai-brain]` TOML table:
 
 ```sh
-brain-mcp --setup /absolute/path/mcp.json --harness-id=antigravity --database=/absolute/path/brain.db
+brain-mcp --setup /absolute/path/mcp.json --harness-id=antigravity --database=/absolute/path/brain.db --model-cache=/absolute/path/models
+brain-mcp --setup ~/.codex/config.toml --harness-id=codex --database=/absolute/path/brain.db --model-cache=/absolute/path/models --format=toml --replace
 brain-mcp --undo-setup /absolute/path/mcp.json
 ```
 
 The containing directory must exist. Setup preserves other settings, writes a
 sibling `.brain-setup.json` undo record, and is a no-op when repeated with the
-same entry. An existing different `ai-brain` entry is refused unless `--replace`
-is supplied; undo restores that prior entry. Undo refuses to overwrite a Brain
-entry changed after setup, and preserves unrelated concurrent configuration edits.
-Keep the backup until you no longer need undo. Protect it like the configuration.
+same entry. `--format=json|toml` overrides format auto-detection (`.toml` files
+default to TOML). `--model-cache=PATH` emits `env.BRAIN_MODEL_CACHE_DIR`, and
+`command` resolves through `realpathSync(process.execPath)` so `nvm-windows`
+symlinks stay locked to the installed `better-sqlite3` native ABI.
 
-For other formats, including TOML, use the host's registration mechanism with
-the command/args printed by `--config`; this writer does not guess host-specific
-config locations or convert formats. Reconnect the host and call `brain_status`.
-Then call `brain_context` and verify the event's harness label in the visualizer.
-Setup does not prove the host has reconnected; that requires the verification call.
+An existing different `ai-brain` entry is refused unless `--replace` is supplied.
+On `--replace`, harness-specific fields (`type: "stdio"`, `disabled: false`,
+timeouts, etc.) and existing `env` keys are preserved and merged; undo restores
+that prior entry. Undo refuses to overwrite a Brain entry changed after setup,
+and preserves unrelated concurrent configuration edits. Keep the backup until you
+no longer need undo. Protect it like the configuration.
+
+For unsupported config formats, use the host's registration mechanism with the
+command/args printed by `--config [--format=json|toml] [--model-cache=PATH]`.
+Run `brain-mcp --doctor` to audit all known harness configs, Node runtime/ABI
+alignment, global skills, and split databases. Reconnect the host and call
+`brain_status`. Then call `brain_context` and verify the event's harness label in
+the visualizer. Setup does not prove the host has reconnected; that requires the
+verification call.
 
 ## Shared and private memory
 
@@ -123,14 +133,19 @@ Portable skills live in `.agents/skills/brain-visualize/SKILL.md` and
 `.agents/skills/brain-merge/SKILL.md`:
 
 - `/brain-visualize` launches (or reuses) the read-only production visualizer via
-  `scripts/launch-visualizer.mjs` and opens `http://localhost:4173` (supports
-  `--db`, `--port`, `--no-open`, `--status`, and `--stop`).
+  `brain-visualize` / `brain-mcp --visualize` (or `scripts/launch-visualizer.mjs`
+  in a checkout) and opens `http://localhost:4173` (supports `--db`, `--port`,
+  `--no-open`, `--status`, and `--stop`).
 - `/brain-merge` runs `brain-mcp --sync-native` to mirror native harness memories
   (Claude Code, Codex, Antigravity) read-only into dedicated, non-conflicting
   `native-mirror:*` entries in the shared database (supports `--dry-run`,
   `--watch`, `--harness=<name>`, `--source=<name>:<path>`, and `--no-embed`).
 
-To make these commands available from any project chat (not only inside this
-repository), install copies with absolute paths in each harness's global skills
-or commands directory (`~/.gemini/config/skills/`, `~/.claude/commands/`, and
-`~/.codex/skills/`).
+To install both commands globally with absolute paths for any project chat, run:
+
+```sh
+brain-mcp --install-skills [--harness=antigravity,claude-code,codex] [--database=/absolute/path/brain.db]
+```
+
+This writes the global skill/command files into `~/.gemini/config/skills/`,
+`~/.claude/commands/`, and `~/.codex/skills/`.

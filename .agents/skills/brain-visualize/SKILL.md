@@ -11,14 +11,21 @@ Start (or reuse) the read-only Memory Atlas visualizer server and open it so the
 
 1. Start the launcher in `--foreground` mode as a **long-running background daemon** (`IsDaemon: true` in Antigravity, or background shell task in Claude Code / Codex) so the host process manager does not reap the HTTP server on exit:
 
+   From a repository checkout:
    ```sh
    node scripts/launch-visualizer.mjs --foreground
    ```
 
+   Or from a global `@beanvincentcat/memory-atlas` npm install:
+   ```sh
+   brain-visualize --foreground
+   ```
+   (Equivalent to `brain-mcp --visualize --foreground`. Run `brain-mcp --install-skills` to install absolute-path copies of `/brain-visualize` and `/brain-merge` into global Antigravity, Claude Code, and Codex directories.)
+
    *(If the visualizer is already running on port 4173, the launcher automatically reuses it, opens the URL, prints the JSON status, and exits cleanly.)*
 
    Pass through any optional flags requested by the user:
-   - `--db <path>` — inspect a specific SQLite database (defaults to `data/brain.db`)
+   - `--db <path>` — inspect a specific SQLite database (defaults to configured harness DB, `data/brain.db`, or `~/.brainded/brain.db`)
    - `--port <port>` — override port (defaults to `4173`)
    - `--no-open` — start/check the server without opening the system browser
    - `--status` — check if the visualizer is running and print live stats (normal non-daemon call)

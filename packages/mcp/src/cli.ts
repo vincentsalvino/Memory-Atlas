@@ -1,22 +1,42 @@
 #!/usr/bin/env node
 
-import { setupMcp } from "./setup.js";
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runDoctor } from "./doctor.js";
+import {
+  formatMcpConfig,
+  resolveNodeCommand,
+  resolveUserPath,
+  setupMcp,
+  type Json,
+  type McpConfigFormat,
+} from "./setup.js";
+import { installGlobalSkills } from "./skills.js";
+import { resolveDefaultVisualizerDbPath, runVisualizeCli } from "./visualize.js";
 
 const help = `Usage: brain-mcp [database-path]
        brain-mcp --check [database-path]
-       brain-mcp --config [database-path]
+       brain-mcp --config [database-path] [--harness-id=NAME] [--model-cache=PATH] [--format=json|toml]
+       brain-mcp --setup CONFIG_PATH --harness-id=NAME --database=PATH [--model-cache=PATH] [--format=json|toml] [--replace]
+       brain-mcp --undo-setup CONFIG_PATH [--format=json|toml]
+       brain-mcp --visualize [--db PATH] [--port 4173] [--no-open] [--status] [--stop] [--foreground]
+       brain-mcp --install-skills [--harness=antigravity,claude-code,codex] [--database=PATH]
+       brain-mcp --doctor [database-path] [--database=PATH] [--strict]
        brain-mcp --version
 
 Run the Brainded MCP server over stdio. The default database is ~/.brainded/brain.db.
 --check opens the database and reports storage and vector extension availability.
---config prints an MCP host configuration for this installation.
+--config prints an MCP host configuration for this installation (JSON or Codex TOML).
 --harness-id=NAME sets trusted launcher identity for private project access.
---setup CONFIG.json --harness-id=NAME --database=PATH installs a JSON MCP entry.
---undo-setup CONFIG.json removes the unchanged entry installed by setup.
+--model-cache=PATH sets BRAIN_MODEL_CACHE_DIR in generated config entries.
+--format=json|toml selects mcpServers JSON or Codex [mcp_servers.ai-brain] TOML output.
+--setup CONFIG_PATH installs an MCP entry (auto-detects .toml/.json unless --format is given).
+--undo-setup CONFIG_PATH removes the unchanged entry installed by setup.
+--visualize launches or inspects the read-only Memory Atlas web UI.
+--install-skills writes global /brain-visualize and /brain-merge skills for Antigravity, Claude Code, and Codex.
+--doctor audits harness configs, Node runtime/ABI alignment, global skills, and split databases.
 --upgrade [database-path] backs up and applies pending database migrations.
 --merge-db SOURCE --into TARGET previews a memory snapshot merge.
 --merge-db SOURCE --into TARGET --apply --digest=HASH applies the reviewed preview.
@@ -24,7 +44,105 @@ Run the Brainded MCP server over stdio. The default database is ~/.brainded/brai
        mirrors native harness memories (Claude, Codex, Antigravity) read-only into dedicated Brain entries.
 --reindex-db PATH rebuilds semantic memory indexes (may download model weights).`;
 
+function parseFormat(raw: string | undefined): McpConfigFormat | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === "json" || raw === "toml") return raw;
+  throw new Error(`Invalid --format value "${raw}"; expected json or toml`);
+}
+
 async function run(args: string[]): Promise<void> {
+  if (args[0] === "--visualize") {
+    await runVisualizeCli(args.slice(1));
+    return;
+  }
+
+  if (args[0] === "--install-skills") {
+    const rest = args.slice(1);
+    const harnesses: string[] = [];
+    let givenDb: string | undefined;
+    let homeOverride: string | undefined;
+
+    for (const token of rest) {
+      if (token.startsWith("--harness=")) {
+        const value = token.slice(10).trim();
+        if (!value) throw new Error("--harness= requires one or more harness names");
+        harnesses.push(value);
+      } else if (token.startsWith("--database=")) {
+        const value = token.slice(11).trim();
+        if (!value) throw new Error("--database= requires a database path");
+        givenDb = value;
+      } else if (token.startsWith("--db=")) {
+        const value = token.slice(5).trim();
+        if (!value) throw new Error("--db= requires a database path");
+        givenDb = value;
+      } else if (token.startsWith("--home=")) {
+        const value = token.slice(7).trim();
+        if (!value) throw new Error("--home= requires a directory path");
+        homeOverride = resolveUserPath(value);
+      } else if (token.startsWith("-")) {
+        throw new Error(`Unknown flag for --install-skills: ${token}`);
+      } else if (!givenDb) {
+        givenDb = token;
+      } else {
+        throw new Error("Usage: brain-mcp --install-skills [--harness=antigravity,claude-code,codex] [--database=PATH]");
+      }
+    }
+
+    const effectiveHome = homeOverride ?? homedir();
+    const dbPath = givenDb
+      ? resolveUserPath(givenDb, effectiveHome)
+      : resolveDefaultVisualizerDbPath({ homeDir: effectiveHome });
+
+    const result = installGlobalSkills({
+      dbPath,
+      ...(harnesses.length > 0 ? { harnesses } : {}),
+      homeDir: effectiveHome,
+    });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (args[0] === "--doctor") {
+    const rest = args.slice(1);
+    let givenDb: string | undefined;
+    let homeOverride: string | undefined;
+    let strict = false;
+
+    for (const token of rest) {
+      if (token === "--strict") {
+        strict = true;
+      } else if (token.startsWith("--database=")) {
+        const value = token.slice(11).trim();
+        if (!value) throw new Error("--database= requires a database path");
+        givenDb = value;
+      } else if (token.startsWith("--db=")) {
+        const value = token.slice(5).trim();
+        if (!value) throw new Error("--db= requires a database path");
+        givenDb = value;
+      } else if (token.startsWith("--home=")) {
+        const value = token.slice(7).trim();
+        if (!value) throw new Error("--home= requires a directory path");
+        homeOverride = resolveUserPath(value);
+      } else if (token.startsWith("-")) {
+        throw new Error(`Unknown flag for --doctor: ${token}`);
+      } else if (!givenDb) {
+        givenDb = token;
+      } else {
+        throw new Error("Usage: brain-mcp --doctor [database-path] [--database=PATH] [--strict]");
+      }
+    }
+
+    const report = runDoctor({
+      ...(givenDb ? { dbPath: givenDb } : {}),
+      ...(homeOverride ? { homeDir: homeOverride } : {}),
+    });
+    console.log(JSON.stringify(report, null, 2));
+    if (strict && !report.ok) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   if (args[0] === "--sync-native") {
     const rest = args.slice(1);
     let givenDb: string | undefined;
@@ -59,7 +177,7 @@ async function run(args: string[]): Promise<void> {
     }
 
     const dataDir = join(homedir(), ".brainded");
-    const dbPath = givenDb ? resolve(givenDb) : process.env.BRAIN_DB_PATH ? resolve(process.env.BRAIN_DB_PATH) : join(dataDir, "brain.db");
+    const dbPath = givenDb ? resolveUserPath(givenDb) : process.env.BRAIN_DB_PATH ? resolveUserPath(process.env.BRAIN_DB_PATH) : join(dataDir, "brain.db");
     if (!givenDb || dbPath === join(dataDir, "brain.db")) mkdirSync(dataDir, { recursive: true });
 
     const syncOptions = {
@@ -68,7 +186,7 @@ async function run(args: string[]): Promise<void> {
       dryRun,
       backup,
       embed,
-      cacheDir: process.env.BRAIN_MODEL_CACHE_DIR ? resolve(process.env.BRAIN_MODEL_CACHE_DIR) : join(dataDir, "models"),
+      cacheDir: process.env.BRAIN_MODEL_CACHE_DIR ? resolveUserPath(process.env.BRAIN_MODEL_CACHE_DIR) : join(dataDir, "models"),
       localFilesOnly: process.env.BRAIN_LOCAL_FILES_ONLY === "1",
     };
 
@@ -103,31 +221,71 @@ async function run(args: string[]): Promise<void> {
   }
 
   if (args[0] === "--merge-db") {
-    const [ , source, intoFlag, target, ...flags ] = args;
+    const [, source, intoFlag, target, ...flags] = args;
     const apply = flags.includes("--apply");
-    const digest = flags.find(flag => flag.startsWith("--digest="))?.slice(9);
-    if (!source || intoFlag !== "--into" || !target || flags.some(flag => flag !== "--apply" && !flag.startsWith("--digest=")) || (apply !== Boolean(digest))) {
+    const digest = flags.find((flag) => flag.startsWith("--digest="))?.slice(9);
+    if (!source || intoFlag !== "--into" || !target || flags.some((flag) => flag !== "--apply" && !flag.startsWith("--digest=")) || apply !== Boolean(digest)) {
       throw new Error("Usage: brain-mcp --merge-db SOURCE --into TARGET [--apply --digest=PREVIEW_DIGEST]");
     }
     const { mergeMemoryDatabases } = await import("./bootstrap.js");
-    console.log(JSON.stringify(mergeMemoryDatabases(resolve(source), resolve(target), apply ? digest : undefined), null, 2));
+    console.log(JSON.stringify(mergeMemoryDatabases(resolveUserPath(source), resolveUserPath(target), apply ? digest : undefined), null, 2));
     return;
   }
+
   const setupMode = args[0] === "--setup" || args[0] === "--undo-setup";
   if (setupMode) {
     const [mode, configPath, ...flags] = args;
-    const harness = flags.find(a => a.startsWith("--harness-id="))?.slice(13);
-    const database = flags.find(a => a.startsWith("--database="))?.slice(11);
-    if (!configPath || flags.some(a => !a.startsWith("--harness-id=") && !a.startsWith("--database=") && a !== "--replace")) throw new Error("Usage: --setup config.json --harness-id=NAME --database=ABSOLUTE_PATH; --undo-setup config.json");
-    if (mode === "--setup" && (!harness || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(harness) || !database)) throw new Error("Setup requires a valid harness identity and explicit database path");
-    setupMcp(configPath, { command: process.execPath, args: [fileURLToPath(import.meta.url), resolve(database ?? "."), `--harness-id=${harness}`] }, mode === "--undo-setup", flags.includes("--replace"));
+    const harness = flags.find((a) => a.startsWith("--harness-id="))?.slice(13);
+    const database = flags.find((a) => a.startsWith("--database="))?.slice(11);
+    const modelCacheArg = flags.find((a) => a.startsWith("--model-cache="));
+    const modelCache = modelCacheArg?.slice(14);
+    const formatArg = flags.find((a) => a.startsWith("--format="));
+    const format = parseFormat(formatArg?.slice(9));
+    if (modelCacheArg !== undefined && !modelCache) {
+      throw new Error("--model-cache=PATH requires a directory path");
+    }
+    if (
+      !configPath ||
+      flags.some(
+        (a) =>
+          !a.startsWith("--harness-id=") &&
+          !a.startsWith("--database=") &&
+          !a.startsWith("--model-cache=") &&
+          !a.startsWith("--format=") &&
+          a !== "--replace",
+      )
+    ) {
+      throw new Error(
+        "Usage: --setup CONFIG_PATH --harness-id=NAME --database=ABSOLUTE_PATH [--model-cache=PATH] [--format=json|toml] [--replace]; --undo-setup CONFIG_PATH [--format=json|toml]",
+      );
+    }
+    if (mode === "--setup" && (!harness || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(harness) || !database)) {
+      throw new Error("Setup requires a valid harness identity and explicit database path");
+    }
+    const entry: Json = {
+      command: resolveNodeCommand(process.execPath),
+      args: [fileURLToPath(import.meta.url), resolveUserPath(database ?? "."), `--harness-id=${harness}`],
+      ...(modelCache ? { env: { BRAIN_MODEL_CACHE_DIR: resolveUserPath(modelCache) } } : {}),
+    };
+    setupMcp(resolveUserPath(configPath), entry, mode === "--undo-setup", flags.includes("--replace"), format);
     console.log("MCP configuration updated. Reconnect the harness and call brain_status to verify connectivity.");
     return;
   }
-  const harnessArg = args.find(arg => arg.startsWith("--harness-id="));
+
+  const harnessArg = args.find((arg) => arg.startsWith("--harness-id="));
   const harnessId = harnessArg?.slice(13);
   if (harnessId !== undefined && !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(harnessId)) throw new Error("Invalid harness identity");
-  args = args.filter(arg => arg !== harnessArg);
+
+  const isConfigMode = args.includes("--config");
+  const modelCacheArg = isConfigMode ? args.find((arg) => arg.startsWith("--model-cache=")) : undefined;
+  const modelCache = modelCacheArg?.slice(14);
+  if (modelCacheArg !== undefined && !modelCache) {
+    throw new Error("--model-cache=PATH requires a directory path");
+  }
+  const formatArg = isConfigMode ? args.find((arg) => arg.startsWith("--format=")) : undefined;
+  const format = parseFormat(formatArg?.slice(9));
+
+  args = args.filter((arg) => arg !== harnessArg && arg !== modelCacheArg && arg !== formatArg);
   const [first, second] = args;
   if (args.length === 1 && (first === "--help" || first === "-h")) {
     console.log(help);
@@ -143,16 +301,21 @@ async function run(args: string[]): Promise<void> {
   if (args.length > (mode ? 2 : 1) || givenPath?.startsWith("-")) throw new Error(help);
 
   const dataDir = join(homedir(), ".brainded");
-  const dbPath = givenPath ? resolve(givenPath) : process.env.BRAIN_DB_PATH ? resolve(process.env.BRAIN_DB_PATH) : join(dataDir, "brain.db");
+  const dbPath = givenPath ? resolveUserPath(givenPath) : process.env.BRAIN_DB_PATH ? resolveUserPath(process.env.BRAIN_DB_PATH) : join(dataDir, "brain.db");
   if (mode === "--config") {
-    console.log(JSON.stringify({ mcpServers: { "ai-brain": { command: process.execPath, args: [fileURLToPath(import.meta.url), dbPath, ...(harnessArg ? [harnessArg] : [])] } } }, null, 2));
+    const entry: Json = {
+      command: resolveNodeCommand(process.execPath),
+      args: [fileURLToPath(import.meta.url), dbPath, ...(harnessArg ? [harnessArg] : [])],
+      ...(modelCache ? { env: { BRAIN_MODEL_CACHE_DIR: resolveUserPath(modelCache) } } : {}),
+    };
+    console.log(formatMcpConfig(entry, format ?? "json"));
     return;
   }
 
   if (!givenPath || dbPath === join(dataDir, "brain.db")) mkdirSync(dataDir, { recursive: true });
   const options = {
     ...(harnessId ? { harnessId } : {}),
-    cacheDir: process.env.BRAIN_MODEL_CACHE_DIR ? resolve(process.env.BRAIN_MODEL_CACHE_DIR) : join(dataDir, "models"),
+    cacheDir: process.env.BRAIN_MODEL_CACHE_DIR ? resolveUserPath(process.env.BRAIN_MODEL_CACHE_DIR) : join(dataDir, "models"),
     localFilesOnly: process.env.BRAIN_LOCAL_FILES_ONLY === "1",
   };
   if (mode === "--upgrade") {
@@ -182,7 +345,7 @@ async function run(args: string[]): Promise<void> {
   await main(dbPath, options);
 }
 
-run(process.argv.slice(2)).catch(error => {
+run(process.argv.slice(2)).catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

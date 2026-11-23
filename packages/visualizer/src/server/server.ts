@@ -1,5 +1,7 @@
 import { createServer } from "node:http";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { extname, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createVisualizerBrain } from "./bootstrap.js";
@@ -16,11 +18,16 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function main(): Promise<void> {
-  const defaultDbPath = resolve(__dirname, "..", "..", "..", "..", "data", "brain.db");
+  const repoDefaultDbPath = resolve(__dirname, "..", "..", "..", "..", "data", "brain.db");
+  const defaultDbPath = existsSync(repoDefaultDbPath) ? repoDefaultDbPath : join(homedir(), ".brainded", "brain.db");
   const dbPath = process.env.BRAIN_DB_PATH ?? process.argv[2] ?? defaultDbPath;
   const brain = createVisualizerBrain(dbPath);
   const handleApi = createApiHandler(brain.queryService);
-  const uiRoot = resolve(__dirname, "..", "ui"); // dist/server/server.js -> dist/ui
+  const uiRoot = process.env.BRAIN_VISUALIZER_UI_DIR
+    ? resolve(process.env.BRAIN_VISUALIZER_UI_DIR)
+    : existsSync(resolve(__dirname, "..", "ui", "index.html"))
+      ? resolve(__dirname, "..", "ui")
+      : resolve(__dirname, "ui");
 
   const server = createServer((req, res) => {
     if (req.url?.startsWith("/api/")) {
@@ -49,7 +56,7 @@ export async function main(): Promise<void> {
   server.listen(port, () => console.log(`brain-visualizer listening on http://localhost:${port}`));
 }
 
-if (process.argv[1]?.endsWith("server.js")) {
+if (process.argv[1]?.endsWith("server.js") || process.argv[1]?.endsWith("visualizer-server.js")) {
   main().catch((error: unknown) => {
     console.error("brain-visualizer failed to start:", error);
     process.exit(1);

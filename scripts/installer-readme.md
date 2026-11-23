@@ -1,26 +1,48 @@
 # Memory Atlas MCP
 
-Install the release tarball with Node.js 24 or newer.
+Install the release tarball or npm package with Node.js 24 or newer.
 
 ```text
-npm install --global @beanvincentcat/memory-atlas@0.2.1
+npm install --global @beanvincentcat/memory-atlas
 brain-mcp --check
-brain-mcp --config
+brain-mcp --config --harness-id=antigravity --model-cache=~/.brainded/models
+brain-mcp --config --harness-id=codex --format=toml --model-cache=~/.brainded/models
+brain-mcp --doctor
 ```
 
-Add the generated `ai-brain` entry to your local MCP client and reconnect.
-The command in the entry launches Memory Atlas over stdio. In the client, call
-`brain_status` to verify the connection. The default database lives at
-`~/.brainded/brain.db`. Pass an absolute database path after `--check` or
-`--config` to select an existing database.
+Add the generated `ai-brain` entry to your local MCP client (or run `brain-mcp --setup`)
+and reconnect. The command in the entry launches Memory Atlas over stdio and pins
+`command` via `realpathSync(process.execPath)` so `nvm-windows` symlinks cannot diverge
+from the installed `better-sqlite3` native ABI. In the client, call `brain_status` to
+verify the connection. The default database lives at `~/.brainded/brain.db`. Pass an
+absolute database path after `--check` or `--config` to select an existing database.
 
 npm installs the dependencies for your platform. The local embedding model is
 downloaded on first semantic use and cached in `~/.brainded/models`. SQLite
 storage and keyword lookup are available when embeddings are unavailable.
-Set `BRAIN_MODEL_CACHE_DIR` to use a different cache, or set
+Pass `--model-cache=PATH` to `--config` / `--setup` (or set `BRAIN_MODEL_CACHE_DIR`)
+to share a specific cache directory across harnesses, or set
 `BRAIN_LOCAL_FILES_ONLY=1` to restrict model loading to the local cache.
 
-## Updating
+## Visualizer and global skills
+
+The npm package includes the read-only Memory Atlas web UI and launcher:
+
+```text
+brain-visualize --foreground
+brain-mcp --visualize --status
+brain-mcp --install-skills --database=/absolute/path/brain.db
+```
+
+`--install-skills` writes global `/brain-visualize` and `/brain-merge` commands into
+Antigravity (`~/.gemini/config/skills/`), Claude Code (`~/.claude/commands/`), and
+Codex (`~/.codex/skills/`) with absolute paths to the installed runtime and database.
+
+## Auditing and updating
+
+Run `brain-mcp --doctor` to inspect Antigravity, Claude Code, and Codex configs,
+verify they target a single shared database and matching Node runtime, flag missing
+`--harness-id` arguments, and detect split legacy databases or missing global skills.
 
 Install a newer project-produced tarball over this installation, then reconnect
 your MCP clients. The configured database stays outside the package. Existing
