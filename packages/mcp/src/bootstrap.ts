@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
 import { resolveRuntimeConfig } from "@brain/contracts";
 import { SqliteHarnessStore } from "@brain/storage";
 import { openDatabase } from "@brain/storage";
@@ -88,6 +89,83 @@ export function upgradeMemoryDatabase(path: string) {
   const db = openDatabase(path);
   try { return { database: path, migrations: appliedMigrations(db.raw) }; }
   finally { db.close(); }
+}
+
+export interface MemoryDatabaseInspection {
+  path: string;
+  exists: boolean;
+  valid: boolean;
+  sizeBytes: number | null;
+  memoriesTotal: number;
+  memoriesActive: number;
+  appliedMigrationsCount: number;
+  latestMigration: string | null;
+  vectorSearchAvailable: boolean;
+  error?: string;
+}
+
+export function inspectMemoryDatabase(path: string): MemoryDatabaseInspection {
+  if (!existsSync(path)) {
+    return {
+      path,
+      exists: false,
+      valid: false,
+      sizeBytes: null,
+      memoriesTotal: 0,
+      memoriesActive: 0,
+      appliedMigrationsCount: 0,
+      latestMigration: null,
+      vectorSearchAvailable: false,
+    };
+  }
+  const sizeBytes = statSync(path).size;
+  let db: ReturnType<typeof openDatabase> | null = null;
+  try {
+    db = openDatabase(path, { readonly: true });
+    const hasMemories = Boolean(
+      db.raw.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memories'").get(),
+    );
+    const hasMigrations = Boolean(
+      db.raw.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get(),
+    );
+    let memoriesTotal = 0;
+    let memoriesActive = 0;
+    if (hasMemories) {
+      const row = db.raw
+        .prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active FROM memories")
+        .get() as { total: number; active: number | null };
+      memoriesTotal = row.total;
+      memoriesActive = row.active ?? 0;
+    }
+    const migrations = hasMigrations ? appliedMigrations(db.raw) : [];
+    return {
+      path,
+      exists: true,
+      valid: hasMemories,
+      sizeBytes,
+      memoriesTotal,
+      memoriesActive,
+      appliedMigrationsCount: migrations.length,
+      latestMigration: migrations[migrations.length - 1] ?? null,
+      vectorSearchAvailable: db.vectorSearchAvailable,
+      ...(hasMemories ? {} : { error: "SQLite file is missing the memories table" }),
+    };
+  } catch (error) {
+    return {
+      path,
+      exists: true,
+      valid: false,
+      sizeBytes,
+      memoriesTotal: 0,
+      memoriesActive: 0,
+      appliedMigrationsCount: 0,
+      latestMigration: null,
+      vectorSearchAvailable: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    db?.close();
+  }
 }
 
 export function reindexMemories(path: string, options: {cacheDir?: string; localFilesOnly?: boolean}) {

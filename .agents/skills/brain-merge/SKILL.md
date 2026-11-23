@@ -24,8 +24,10 @@ Mirror native harness memories into the shared Memory Atlas SQLite database so e
    Or invoke directly with optional flags:
 
    ```sh
-   node packages/mcp/dist/cli.js --sync-native data/brain.db [--dry-run] [--watch] [--harness=<name>] [--source=<name>:<path>] [--no-embed]
+   brain-mcp --sync-native [database-path] [--dry-run] [--watch] [--harness=<name>] [--source=<name>:<path>] [--no-embed]
    ```
+
+   (Run `brain-mcp --install-skills [--database=PATH]` to install global `/brain-merge` and `/brain-visualize` commands for Antigravity, Claude Code, and Codex.)
 
    - `--dry-run` — preview what would be added, updated, superseded, or archived without writing
    - `--watch` — keep watching native memory folders and auto-sync changes live
@@ -33,7 +35,7 @@ Mirror native harness memories into the shared Memory Atlas SQLite database so e
    - `--source=<name>:<path>` — include an additional custom harness markdown directory, repeatable
    - `--no-embed` — skip local vector embedding (lexical FTS5 search still updates immediately)
 
-   *(If the user instead asks to merge two separate Brain `.db` files, run `brain-mcp --merge-db <source.db> --into <target.db>` to preview first, then `--apply --digest=<hash>` after confirmation.)*
+   *(If the user instead asked to merge two separate Brain `.db` files, run `brain-mcp --merge-db <source.db> --into <target.db>` to preview first, then `--apply --digest=<hash>` after confirmation.)*
 
 2. Parse the JSON result and report:
    - Scanned harnesses and total discovered native memories

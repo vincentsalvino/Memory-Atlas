@@ -29,13 +29,31 @@ Do not install an unrelated similarly named package. npm updates
 local dependencies within their semver ranges; a global update targets the
 registry's wanted version. [npm update documentation](https://docs.npmjs.com/cli/v11/commands/npm-update/)
 
-Configure both harnesses once using the installed CLI's `--config`/`--setup`,
-with the **same absolute database path** and different `--harness-id` values.
-Generated launch paths point inside the installation, not a version-numbered
-release folder. Subsequent npm replacement of that same installation does not
-require choosing a new database. Configurations pointing at a source checkout
-continue to run that checkout; installing/updating a global package does not
-silently redirect them.
+Configure harnesses once using the installed CLI's `--config`/`--setup` (including
+`--format=toml` for Codex, `--model-cache=PATH` for `BRAIN_MODEL_CACHE_DIR`, and
+`--replace` to preserve existing harness-specific fields and `env` keys), with the
+**same absolute database path** and different `--harness-id` values. Generated
+launch paths resolve `command` via `realpathSync(process.execPath)` so
+`nvm-windows` symlinks stay locked to the installed `better-sqlite3` native ABI,
+and point inside the installation rather than a version-numbered release folder.
+Subsequent npm replacement of that same installation does not require choosing a
+new database. Configurations pointing at a source checkout continue to run that
+checkout; installing/updating a global package does not silently redirect them.
+
+After global install or update, run:
+
+```sh
+brain-mcp --doctor
+brain-mcp --install-skills --database=/absolute/path/brain.db
+brain-visualize --status
+```
+
+`--doctor` audits Antigravity, Claude Code, and Codex configurations for split
+databases, legacy `server.js` entrypoints, missing `--harness-id` flags, Node
+runtime/ABI mismatches, and missing global skills. `--install-skills` installs
+`/brain-visualize` and `/brain-merge` into each harness's global directory, and
+`brain-visualize` (or `brain-mcp --visualize`) launches the packaged read-only
+web UI directly without requiring a separate built git clone.
 
 Reconnect Codex/Claude after replacing application files. A running process does
 not hot-reload code. Persistent data remains outside the npm package at the

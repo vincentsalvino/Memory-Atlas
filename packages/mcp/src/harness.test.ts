@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase, SqliteMemoryRepository, SqliteEventStore, SqliteRetrievalStore, SqliteHarnessStore } from "@brain/storage";
@@ -10,7 +11,10 @@ import { MemoryService } from "@brain/memory";
 import { RetrievalService } from "@brain/retrieval";
 import { EventService } from "@brain/learning";
 import { Gateway } from "@brain/gateway";
-import { setupMcp } from "./setup.js";
+import { formatMcpConfig, parseTomlMcpServers, setupMcp } from "./setup.js";
+import { installGlobalSkills } from "./skills.js";
+import { runDoctor } from "./doctor.js";
+import { runVisualizeCli } from "./visualize.js";
 import { feedbackShape, recordOutcomeShape } from "./schemas.js";
 
 test("private project knowledge cannot be read or changed by a foreign or unidentified launcher", async () => {
@@ -97,4 +101,376 @@ test("setup is repeatable, preserves unrelated settings, rejects replacements an
     setupMcp(path, {}, true);
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).mcpServers["ai-brain"], original);
   } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+
+test("setupMcp preserves harness-specific JSON fields and merges env on --replace, and supports undo", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brain-setup-preserve-"));
+  try {
+    const configPath = join(dir, "claude.json");
+    const original = {
+      type: "stdio",
+      command: "node",
+      args: ["old.js"],
+      disabled: false,
+      timeout: 60000,
+      env: { KEEP_VAR: "stay", BRAIN_MODEL_CACHE_DIR: "/old/models" },
+    };
+    writeFileSync(configPath, JSON.stringify({ otherSetting: 42, mcpServers: { "ai-brain": original } }));
+
+    setupMcp(
+      configPath,
+      {
+        command: "C:\\node\\v26\\node.exe",
+        args: ["C:\\pkg\\cli.js", "C:\\data\\brain.db", "--harness-id=claude-code"],
+        env: { BRAIN_MODEL_CACHE_DIR: "C:\\models" },
+      },
+      false,
+      true,
+    );
+
+    const replaced = JSON.parse(readFileSync(configPath, "utf8"));
+    assert.equal(replaced.otherSetting, 42);
+    assert.deepEqual(replaced.mcpServers["ai-brain"], {
+      type: "stdio",
+      disabled: false,
+      timeout: 60000,
+      command: "C:\\node\\v26\\node.exe",
+      args: ["C:\\pkg\\cli.js", "C:\\data\\brain.db", "--harness-id=claude-code"],
+      env: { KEEP_VAR: "stay", BRAIN_MODEL_CACHE_DIR: "C:\\models" },
+    });
+
+    // Repeating with the same base entry after --replace is a no-op once merged entry matches.
+    setupMcp(
+      configPath,
+      {
+        command: "C:\\node\\v26\\node.exe",
+        args: ["C:\\pkg\\cli.js", "C:\\data\\brain.db", "--harness-id=claude-code"],
+        env: { BRAIN_MODEL_CACHE_DIR: "C:\\models" },
+      },
+      false,
+      true,
+    );
+
+    setupMcp(configPath, {}, true);
+    assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")).mcpServers["ai-brain"], original);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("setupMcp supports Codex TOML format: create, idempotent, preserve fields/env on --replace, and undo", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brain-setup-toml-"));
+  try {
+    const configPath = join(dir, "config.toml");
+    writeFileSync(
+      configPath,
+      [
+        'model = "gpt-5"',
+        "",
+        "[mcp_servers.ai-brain]",
+        'command = "node"',
+        'args = ["old/server.js", "old/brain.db"]',
+        "startup_timeout_sec = 45",
+        "",
+        "[mcp_servers.ai-brain.env]",
+        'CUSTOM_TOKEN = "abc"',
+        "",
+        "[mcp_servers.other]",
+        'command = "other-tool"',
+        "args = []",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const incoming = {
+      command: "C:\\nvm\\v26.13.1\\node.exe",
+      args: ["C:\\pkg\\cli.js", "C:\\shared\\brain.db", "--harness-id=codex"],
+      env: { BRAIN_MODEL_CACHE_DIR: "C:\\models" },
+    };
+
+    assert.throws(() => setupMcp(configPath, incoming, false, false, "toml"), /already exists/i);
+    setupMcp(configPath, incoming, false, true, "toml");
+    setupMcp(configPath, incoming, false, true, "toml");
+
+    const updatedRaw = readFileSync(configPath, "utf8");
+    const parsed = parseTomlMcpServers(updatedRaw);
+    assert.deepEqual(parsed["ai-brain"], {
+      command: "C:\\nvm\\v26.13.1\\node.exe",
+      args: ["C:\\pkg\\cli.js", "C:\\shared\\brain.db", "--harness-id=codex"],
+      startup_timeout_sec: 45,
+      env: {
+        CUSTOM_TOKEN: "abc",
+        BRAIN_MODEL_CACHE_DIR: "C:\\models",
+      },
+    });
+    assert.deepEqual(parsed.other, { command: "other-tool", args: [] });
+    assert.match(updatedRaw, /model = "gpt-5"/);
+
+    // Concurrent edit elsewhere in config.toml survives undo.
+    writeFileSync(configPath, updatedRaw + '\n[profiles.fast]\nmodel = "mini"\n', "utf8");
+    setupMcp(configPath, {}, true, false, "toml");
+    const undoneRaw = readFileSync(configPath, "utf8");
+    assert.match(undoneRaw, /\[profiles\.fast\]/);
+    assert.deepEqual(parseTomlMcpServers(undoneRaw)["ai-brain"], {
+      command: "node",
+      args: ["old/server.js", "old/brain.db"],
+      startup_timeout_sec: 45,
+      env: { CUSTOM_TOKEN: "abc" },
+    });
+
+    // Fresh TOML setup + undo removes the installed section cleanly.
+    const freshToml = join(dir, "fresh.toml");
+    writeFileSync(freshToml, 'model = "gpt-5"\n', "utf8");
+    setupMcp(freshToml, incoming);
+    assert.ok(parseTomlMcpServers(readFileSync(freshToml, "utf8"))["ai-brain"]);
+    setupMcp(freshToml, {}, true);
+    assert.equal(parseTomlMcpServers(readFileSync(freshToml, "utf8"))["ai-brain"], undefined);
+    assert.match(readFileSync(freshToml, "utf8"), /model = "gpt-5"/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("formatMcpConfig formats JSON and TOML entries with BRAIN_MODEL_CACHE_DIR", () => {
+  const entry = {
+    command: "C:\\nvm\\v26.13.1\\node.exe",
+    args: ["C:\\pkg\\cli.js", "C:\\data\\brain.db", "--harness-id=codex"],
+    env: { BRAIN_MODEL_CACHE_DIR: "C:\\cache\\models" },
+  };
+  const jsonOut = JSON.parse(formatMcpConfig(entry, "json"));
+  assert.deepEqual(jsonOut.mcpServers["ai-brain"], entry);
+
+  const tomlOut = formatMcpConfig(entry, "toml");
+  assert.match(tomlOut, /^\[mcp_servers\.ai-brain\]/m);
+  assert.match(tomlOut, /\[mcp_servers\.ai-brain\.env\]/);
+  assert.deepEqual(parseTomlMcpServers(tomlOut)["ai-brain"], entry);
+});
+
+test("installGlobalSkills writes /brain-visualize and /brain-merge for antigravity, claude-code, and codex", () => {
+  const home = mkdtempSync(join(tmpdir(), "brain-skills-"));
+  try {
+    const dbPath = join(home, ".brainded", "brain.db");
+    const result = installGlobalSkills({
+      dbPath,
+      homeDir: home,
+      nodeCommand: "C:\\node\\node.exe",
+      cliPath: "C:\\pkg\\dist\\cli.js",
+    });
+
+    assert.equal(result.installedFiles.length, 6);
+    const agVis = readFileSync(join(home, ".gemini", "config", "skills", "brain-visualize", "SKILL.md"), "utf8");
+    const agMerge = readFileSync(join(home, ".gemini", "config", "skills", "brain-merge", "SKILL.md"), "utf8");
+    const codexVis = readFileSync(join(home, ".codex", "skills", "brain-visualize", "SKILL.md"), "utf8");
+    const codexMerge = readFileSync(join(home, ".codex", "skills", "brain-merge", "SKILL.md"), "utf8");
+    const claudeVis = readFileSync(join(home, ".claude", "commands", "brain-visualize.md"), "utf8");
+    const claudeMerge = readFileSync(join(home, ".claude", "commands", "brain-merge.md"), "utf8");
+
+    for (const content of [agVis, codexVis, claudeVis]) {
+      assert.ok(content.includes('"C:\\node\\node.exe" "C:\\pkg\\dist\\cli.js" --visualize --db'));
+      assert.ok(content.includes(dbPath));
+    }
+    for (const content of [agMerge, codexMerge, claudeMerge]) {
+      assert.ok(content.includes('"C:\\node\\node.exe" "C:\\pkg\\dist\\cli.js" --sync-native'));
+      assert.ok(content.includes(dbPath));
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("runDoctor flags split databases, legacy server.js, missing --harness-id, bare node, non-canonical key, and nvm symlink, then reports clean after fixing", () => {
+  const home = mkdtempSync(join(tmpdir(), "brain-doctor-"));
+  try {
+    const primaryDb = join(home, ".brainded", "brain.db");
+    const secondaryDb = join(home, "legacy", "brain.db");
+    mkdirSync(join(home, ".brainded"), { recursive: true });
+    mkdirSync(join(home, "legacy"), { recursive: true });
+    openDatabase(primaryDb).close();
+    openDatabase(secondaryDb).close();
+
+    const realNodeDir = join(home, "nvm", "v26.13.1");
+    const junctionNodeDir = join(home, "nvm4w", "nodejs");
+    const fakeCli = join(realNodeDir, "node_modules", "@beanvincentcat", "memory-atlas", "dist", "cli.js");
+    const fakeLegacyServer = join(home, "legacy", "server.js");
+    mkdirSync(join(realNodeDir, "node_modules", "@beanvincentcat", "memory-atlas", "dist"), { recursive: true });
+    mkdirSync(join(home, "nvm4w"), { recursive: true });
+    const nodeBinName = process.platform === "win32" ? "node.exe" : "node";
+    const realNodeBin = join(realNodeDir, nodeBinName);
+    writeFileSync(realNodeBin, "", "utf8");
+    writeFileSync(fakeCli, "", "utf8");
+    writeFileSync(fakeLegacyServer, "", "utf8");
+    symlinkSync(realNodeDir, junctionNodeDir, process.platform === "win32" ? "junction" : "dir");
+    const symlinkNodeBin = join(junctionNodeDir, nodeBinName);
+
+    mkdirSync(join(home, ".gemini", "config"), { recursive: true });
+    writeFileSync(
+      join(home, ".gemini", "config", "mcp_config.json"),
+      JSON.stringify({
+        mcpServers: {
+          "ai-brain": {
+            command: symlinkNodeBin,
+            args: [fakeCli, primaryDb],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    writeFileSync(
+      join(home, ".claude.json"),
+      JSON.stringify({
+        mcpServers: {
+          brain: {
+            type: "stdio",
+            command: "node",
+            args: [fakeLegacyServer, secondaryDb, "--harness-id=claude-code"],
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    writeFileSync(
+      join(home, ".codex", "config.toml"),
+      `[mcp_servers.ai-brain]\ncommand = "node"\nargs = [${JSON.stringify(fakeCli)}, ${JSON.stringify(primaryDb)}]\n`,
+      "utf8",
+    );
+
+    const broken = runDoctor({
+      homeDir: home,
+      cwd: home,
+      execPath: realNodeBin,
+      cliPath: fakeCli,
+    });
+    assert.equal(broken.ok, false);
+    const codes = new Set(broken.issues.map((i) => i.code));
+    assert.ok(codes.has("nvm_symlink_command"));
+    assert.ok(codes.has("missing_harness_id"));
+    assert.ok(codes.has("non_canonical_server_key"));
+    assert.ok(codes.has("bare_node_command"));
+    assert.ok(codes.has("legacy_server_entrypoint"));
+    assert.ok(codes.has("split_configured_databases"));
+    assert.ok(codes.has("legacy_or_split_databases_detected"));
+    assert.ok(codes.has("missing_model_cache_dir"));
+    assert.ok(codes.has("missing_global_skills"));
+    assert.ok(broken.recommendations.length >= 3);
+
+    // Fix configs, remove legacy secondary DB, and install global skills.
+    rmSync(secondaryDb, { force: true });
+    const cacheDir = join(home, ".brainded", "models");
+    setupMcp(
+      join(home, ".gemini", "config", "mcp_config.json"),
+      { command: realNodeBin, args: [fakeCli, primaryDb, "--harness-id=antigravity"], env: { BRAIN_MODEL_CACHE_DIR: cacheDir } },
+      false,
+      true,
+    );
+    writeFileSync(join(home, ".claude.json"), JSON.stringify({ mcpServers: {} }), "utf8");
+    setupMcp(
+      join(home, ".claude.json"),
+      { type: "stdio", command: realNodeBin, args: [fakeCli, primaryDb, "--harness-id=claude-code"], env: { BRAIN_MODEL_CACHE_DIR: cacheDir } },
+      false,
+      true,
+    );
+    setupMcp(
+      join(home, ".codex", "config.toml"),
+      { command: realNodeBin, args: [fakeCli, primaryDb, "--harness-id=codex"], env: { BRAIN_MODEL_CACHE_DIR: cacheDir } },
+      false,
+      true,
+      "toml",
+    );
+    installGlobalSkills({ dbPath: primaryDb, homeDir: home, nodeCommand: realNodeBin, cliPath: fakeCli });
+
+    const clean = runDoctor({
+      homeDir: home,
+      cwd: home,
+      execPath: realNodeBin,
+      cliPath: fakeCli,
+    });
+    assert.equal(clean.ok, true);
+    assert.deepEqual(clean.issues, []);
+    assert.equal(clean.databases.length, 1);
+  } finally {
+    rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
+});
+
+async function allocateFreePort(): Promise<number> {
+  return await new Promise((resolvePort, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => (error ? reject(error) : resolvePort(port)));
+    });
+  });
+}
+
+async function removeDirWithRetry(dir: string): Promise<void> {
+  const deadline = Date.now() + 3000;
+  while (true) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if ((code === "EPERM" || code === "EBUSY" || code === "ENOTEMPTY") && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 50));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+test("runVisualizeCli reports stopped status, starts server against a temp DB, checks running status, and stops cleanly", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "brain-viz-cli-"));
+  const dbPath = join(dir, "brain.db");
+  const port = await allocateFreePort();
+  const captured: string[] = [];
+  const origLog = console.log;
+  console.log = (...args: unknown[]) => {
+    captured.push(args.map(String).join(" "));
+  };
+
+  try {
+    openDatabase(dbPath).close();
+    assert.ok(existsSync(dbPath));
+
+    await runVisualizeCli(["--status", `--port=${port}`], { homeDir: dir, cwd: dir });
+    const before = JSON.parse(captured.pop()!);
+    assert.equal(before.running, false);
+
+    await runVisualizeCli(["--db", dbPath, `--port=${port}`, "--no-open"], { homeDir: dir, cwd: dir });
+    const started = JSON.parse(captured.pop()!);
+    assert.equal(started.alreadyRunning, false);
+    assert.equal(started.port, port);
+    assert.equal(started.opened, false);
+    assert.equal(typeof started.overview?.memoriesTotal, "number");
+
+    await runVisualizeCli(["--status", `--port=${port}`], { homeDir: dir, cwd: dir });
+    const running = JSON.parse(captured.pop()!);
+    assert.equal(running.running, true);
+    assert.equal(running.port, port);
+
+    await runVisualizeCli(["--stop", `--port=${port}`], { homeDir: dir, cwd: dir });
+    const stopped = JSON.parse(captured.pop()!);
+    assert.equal(stopped.stopped, true);
+    assert.equal(stopped.port, port);
+
+    await runVisualizeCli(["--status", `--port=${port}`], { homeDir: dir, cwd: dir });
+    const after = JSON.parse(captured.pop()!);
+    assert.equal(after.running, false);
+  } finally {
+    try {
+      await runVisualizeCli(["--stop", `--port=${port}`], { homeDir: dir, cwd: dir });
+    } catch {
+      // ignore if already stopped
+    }
+    console.log = origLog;
+    await removeDirWithRetry(dir);
+  }
 });

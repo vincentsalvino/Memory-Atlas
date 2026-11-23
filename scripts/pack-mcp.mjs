@@ -1,6 +1,6 @@
 import { build } from 'esbuild';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const lock = readJson(join(root, 'package-lock.json')).packages;
 const { version, dependencies } = readJson(join(root, 'packages/mcp/package.json'));
+const visualizerDependencies = readJson(join(root, 'packages/visualizer/package.json')).dependencies ?? {};
 const name = '@beanvincentcat/memory-atlas';
 const output = resolve(process.argv[2] ?? join(root, '.release'));
 const artifactName = name.replace(/^@/, '').replace('/', '-');
@@ -37,6 +38,18 @@ function visit(deps) {
   }
 }
 visit(dependencies);
+// Include only @brain/* workspace dependencies from @brain/visualizer's server runtime;
+// browser packages (react, react-dom, d3-force) are pre-bundled into packages/visualizer/dist/ui.
+visit(Object.fromEntries(Object.entries(visualizerDependencies).filter(([spec]) => spec.startsWith('@brain/'))));
+
+const visualizerUiDir = join(root, 'packages/visualizer/dist/ui');
+if (!existsSync(join(visualizerUiDir, 'index.html'))) {
+  const built = spawnSync(process.execPath, [process.env.npm_execpath, 'run', 'build'], {
+    cwd: root, encoding: 'utf8',
+  });
+  if (built.error) throw built.error;
+  if (built.status !== 0) throw new Error(built.stderr || built.stdout || 'Failed to build @brain/visualizer UI assets');
+}
 
 const tempRoot = realpathSync(tmpdir());
 const stage = mkdtempSync(join(tempRoot, 'brainded-pack-'));
@@ -48,15 +61,16 @@ try {
   for (const file of readdirSync(migrations).filter(file => /^\d+_[\w-]+\.sql$/.test(file))) {
     copyFileSync(join(migrations, file), join(stage, 'migrations', file));
   }
+  cpSync(visualizerUiDir, join(stage, 'ui'), { recursive: true });
   copyFileSync(join(root, 'scripts/installer-readme.md'), join(stage, 'README.md'));
   writeFileSync(join(stage, 'package.json'), JSON.stringify({
     name, version, description: 'Memory Atlas: shared local memory and context for AI coding agents', type: 'module',
-    bin: { 'brain-mcp': './dist/cli.js' }, engines: { node: '>=24' },
+    bin: { 'brain-mcp': './dist/cli.js', 'brain-visualize': './dist/visualize.js' }, engines: { node: '>=24' },
     repository: { type: 'git', url: 'git+https://github.com/vincentsalvino/Memory-Atlas.git' },
     homepage: 'https://github.com/vincentsalvino/Memory-Atlas#readme',
     bugs: { url: 'https://github.com/vincentsalvino/Memory-Atlas/issues' },
     publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' },
-    files: ['dist/cli.js', 'migrations/*.sql', 'npm-shrinkwrap.json'],
+    files: ['dist/*.js', 'ui/**', 'migrations/*.sql', 'npm-shrinkwrap.json'],
     dependencies: Object.fromEntries([...external].sort(([a], [b]) => a.localeCompare(b))),
     overrides: readJson(join(root, 'package.json')).overrides,
   }, null, 2) + '\n');
@@ -87,22 +101,40 @@ try {
     limitation: 'Advisory snapshot, not proof of absence of vulnerabilities; dependency install scripts may run during npm installation.',
   }, null, 2) + '\n');
 
-  await build({
-    entryPoints: [join(root, 'packages/mcp/src/cli.ts')],
-    outfile: join(stage, 'dist/cli.js'),
+  const workspacePlugin = {
+    name: 'workspace-source',
+    setup(builder) {
+      builder.onResolve({ filter: /^@brain\// }, ({ path }) => {
+        const entry = workspaces.get(path);
+        if (!entry) throw new Error(`Undeclared workspace import ${path}`);
+        return { path: entry };
+      });
+    },
+  };
+
+  const commonBuild = {
     bundle: true, platform: 'node', target: 'node24', format: 'esm', minify: true,
     external: [...external.keys()],
-    plugins: [{
-      name: 'workspace-source',
-      setup(builder) {
-        builder.onResolve({ filter: /^@brain\// }, ({ path }) => {
-          const entry = workspaces.get(path);
-          if (!entry) throw new Error(`Undeclared workspace import ${path}`);
-          return { path: entry };
-        });
-      },
-    }],
-  });
+    plugins: [workspacePlugin],
+  };
+
+  await Promise.all([
+    build({
+      ...commonBuild,
+      entryPoints: [join(root, 'packages/mcp/src/cli.ts')],
+      outfile: join(stage, 'dist/cli.js'),
+    }),
+    build({
+      ...commonBuild,
+      entryPoints: [join(root, 'packages/mcp/src/visualize-bin.ts')],
+      outfile: join(stage, 'dist/visualize.js'),
+    }),
+    build({
+      ...commonBuild,
+      entryPoints: [join(root, 'packages/visualizer/src/server/server.ts')],
+      outfile: join(stage, 'dist/visualizer-server.js'),
+    }),
+  ]);
 
   const result = spawnSync(process.execPath, [process.env.npm_execpath, 'pack', '--json', '--pack-destination', output], {
     cwd: stage, encoding: 'utf8',
