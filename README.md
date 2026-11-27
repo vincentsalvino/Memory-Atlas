@@ -1,4 +1,8 @@
-# Memory Atlas
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/memory-atlas-logo-dark.svg" />
+  <source media="(prefers-color-scheme: light)" srcset="assets/brand/memory-atlas-logo.svg" />
+  <img alt="Memory Atlas" src="assets/brand/memory-atlas-logo.svg" width="340" />
+</picture>
 
 **Give your coding agents shared memory that lasts beyond a single conversation.**
 
