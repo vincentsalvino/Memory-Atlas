@@ -1,4 +1,8 @@
-# Memory Atlas
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/memory-atlas-logo-dark.svg" />
+  <source media="(prefers-color-scheme: light)" srcset="assets/brand/memory-atlas-logo.svg" />
+  <img alt="Memory Atlas" src="assets/brand/memory-atlas-logo.svg" width="340" />
+</picture>
 
 **Give your coding agents shared memory that lasts beyond a single conversation.**
 
@@ -20,7 +24,7 @@ Memory Atlas is available on npm as
 [`@beanvincentcat/memory-atlas`](https://www.npmjs.com/package/@beanvincentcat/memory-atlas):
 
 ```sh
-npm install --global @beanvincentcat/memory-atlas@0.2.1
+npm install --global @beanvincentcat/memory-atlas@0.2.3
 npm update --global @beanvincentcat/memory-atlas
 ```
 
@@ -28,17 +32,17 @@ Reconnect MCP clients after updating. Keep their existing absolute database path
 so both harnesses continue to share the same stored memories.
 
 Download the installer, checksum and dependency-audit snapshot from
-[Memory Atlas v0.2.1](https://github.com/vincentsalvino/Memory-Atlas/releases/tag/v0.2.1).
+[Memory Atlas v0.2.3](https://github.com/vincentsalvino/Memory-Atlas/releases/tag/v0.2.3).
 Verify the tarball with the accompanying `MEMORY-ATLAS-SHA256SUMS.txt`, then install:
 
 ```sh
-npm install --global ./beanvincentcat-memory-atlas-0.2.1.tgz
+npm install --global ./beanvincentcat-memory-atlas-0.2.3.tgz
 brain-mcp --version
 brain-mcp --config
 ```
 
 On Linux, use `sha256sum --check MEMORY-ATLAS-SHA256SUMS.txt`. In PowerShell, use
-`Get-FileHash .\beanvincentcat-memory-atlas-0.2.1.tgz -Algorithm SHA256` and compare
+`Get-FileHash .\beanvincentcat-memory-atlas-0.2.3.tgz -Algorithm SHA256` and compare
 the value with `MEMORY-ATLAS-SHA256SUMS.txt`. Download both from the official release page.
 Use the scoped npm name above: the unscoped `memory-atlas` belongs to another
 publisher. The earlier `brainded-mcp` package is retired. To switch, uninstall it
@@ -280,12 +284,12 @@ for npm-based release replacement, automatic backup/migration on reconnect,
 and previewed consolidation of separate Codex/Claude Brain databases.
 
 Build an npm tarball with `npm run package:mcp`. Copy the resulting
-`.release/beanvincentcat-memory-atlas-0.2.1.tgz` to a device with Node.js 24 or newer.
+`.release/beanvincentcat-memory-atlas-0.2.3.tgz` to a device with Node.js 24 or newer.
 To keep an existing artifact, pass a different output directory with
 `npm run package:mcp -- <output-directory>`.
 
 ```sh
-npm install --global ./beanvincentcat-memory-atlas-0.2.1.tgz
+npm install --global ./beanvincentcat-memory-atlas-0.2.3.tgz
 brain-mcp --check
 brain-mcp --config
 ```

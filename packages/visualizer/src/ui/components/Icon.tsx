@@ -25,6 +25,19 @@ const paths = {
 export type IconName = keyof typeof paths;
 
 export function Icon({ name, ...props }: { name: IconName } & Pick<SVGProps<SVGSVGElement>, "className">) {
+  if (name === "atlas") {
+    return (
+      <svg {...props} width="20" height="20" viewBox="0 0 128 128" fill="none" aria-hidden="true" focusable="false">
+        <path
+          d="M64 59 64 43M76.99 81.5 90.85 89.5M51.01 81.5 37.15 89.5M55 34a9 9 0 1 0 18 0 9 9 0 1 0-18 0M89.64 94a9 9 0 1 0 18 0 9 9 0 1 0-18 0M20.36 94a9 9 0 1 0 18 0 9 9 0 1 0-18 0"
+          stroke="#f4f4f0"
+          strokeWidth="6"
+          strokeLinecap="round"
+        />
+        <path d="M49 74a15 15 0 1 0 30 0 15 15 0 1 0-30 0" fill="#1D9E75" />
+      </svg>
+    );
+  }
   return (
     <svg {...props} width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
       strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
